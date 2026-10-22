@@ -7,18 +7,18 @@ export const NetworkStatusBadge: React.FC = () => {
 
   if (isSyncing) {
     return (
-      <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/30">
-        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-        <span>Sincronizando con Supabase...</span>
+      <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+        <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-600" />
+        <span>Sincronizando...</span>
       </div>
     )
   }
 
   if (!isOnline) {
     return (
-      <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/30 animate-pulse">
-        <WifiOff className="w-3.5 h-3.5" />
-        <span>Modo Offline ({pendingCount} cambios pendientes)</span>
+      <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 animate-pulse">
+        <WifiOff className="w-3.5 h-3.5 text-rose-600" />
+        <span>Offline ({pendingCount} pendientes)</span>
       </div>
     )
   }
@@ -27,9 +27,9 @@ export const NetworkStatusBadge: React.FC = () => {
     <button
       onClick={() => triggerSync()}
       title="Haz clic para sincronizar ahora"
-      className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20 transition-colors"
+      className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
     >
-      <Wifi className="w-3.5 h-3.5" />
+      <Wifi className="w-3.5 h-3.5 text-emerald-600" />
       <span>En línea {pendingCount > 0 ? `(${pendingCount} en cola)` : '✓'}</span>
     </button>
   )

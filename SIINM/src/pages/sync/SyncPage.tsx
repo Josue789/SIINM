@@ -3,6 +3,17 @@ import { RefreshCw, CheckCircle2, Clock, CloudUpload, HardDrive, Wifi, WifiOff }
 import { syncQueueRepository } from '../../db/repositories/syncQueue.repository'
 import { useNetwork } from '../../context/NetworkContext'
 import type { SyncQueueItem } from '../../types/sync.types'
+import { Card } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 
 export const SyncPage: React.FC = () => {
   const [queueItems, setQueueItems] = useState<SyncQueueItem[]>([])
@@ -32,137 +43,137 @@ export const SyncPage: React.FC = () => {
     <div className="space-y-6 max-w-6xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white mb-1">Estado de Sincronización</h1>
-          <p className="text-xs text-slate-400">
-            Monitorea la cola de cambios locales pendientes de sincronizar con Supabase.
+          <h1 className="text-xl md:text-2xl font-black text-slate-800 tracking-wide uppercase m-0">
+            Estado de Sincronización
+          </h1>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Monitorea la cola de cambios locales pendientes de sincronizar con Supabase
           </p>
         </div>
 
-        <button
+        <Button
           onClick={handleManualSync}
           disabled={!isOnline || isSyncing}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-semibold text-xs transition-all shadow-lg shadow-emerald-500/20 disabled:opacity-40 shrink-0 self-start sm:self-auto"
+          className="gap-2 shrink-0 self-start sm:self-auto"
         >
           <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
           <span>{isSyncing ? 'Sincronizando...' : 'Forzar Sincronización'}</span>
-        </button>
+        </Button>
       </div>
 
       {/* Connectivity cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center gap-4">
+        <Card className="p-4 flex items-center gap-4">
           <div
             className={`p-3 rounded-xl ${
-              isOnline ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
+              isOnline ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'
             }`}
           >
             {isOnline ? <Wifi className="w-5 h-5" /> : <WifiOff className="w-5 h-5" />}
           </div>
           <div>
-            <div className="text-xs font-semibold text-slate-400 uppercase">Red</div>
-            <div className="text-sm font-bold text-white">
+            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Red</div>
+            <div className="text-sm font-bold text-slate-800">
               {isOnline ? 'Conectado a Internet' : 'Sin Conexión (Offline)'}
             </div>
           </div>
-        </div>
+        </Card>
 
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center gap-4">
-          <div className="p-3 rounded-xl bg-blue-500/10 text-blue-400">
+        <Card className="p-4 flex items-center gap-4">
+          <div className="p-3 rounded-xl bg-blue-50 text-blue-600">
             <HardDrive className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-xs font-semibold text-slate-400 uppercase">IndexedDB (Dexie)</div>
-            <div className="text-sm font-bold text-white">Activa y saludable</div>
+            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">IndexedDB (Dexie)</div>
+            <div className="text-sm font-bold text-slate-800">Activa y saludable</div>
           </div>
-        </div>
+        </Card>
 
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center gap-4">
-          <div className="p-3 rounded-xl bg-amber-500/10 text-amber-400">
+        <Card className="p-4 flex items-center gap-4">
+          <div className="p-3 rounded-xl bg-amber-50 text-amber-600">
             <CloudUpload className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-xs font-semibold text-slate-400 uppercase">Última Sincronización</div>
-            <div className="text-sm font-bold text-white">
+            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Última Sincronización</div>
+            <div className="text-sm font-bold text-slate-800">
               {lastSyncAt ? new Date(lastSyncAt).toLocaleTimeString() : 'Nunca'}
             </div>
           </div>
-        </div>
+        </Card>
       </div>
 
       {/* Outbox Table */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-        <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
-          <h2 className="text-sm font-bold text-white m-0">
+      <Card className="overflow-hidden p-0 border border-slate-200/80">
+        <div className="px-6 py-4 border-b border-slate-200/80 flex items-center justify-between">
+          <h2 className="text-sm font-bold text-slate-800 m-0">
             Cola de Mutaciones Locales (Outbox Queue)
           </h2>
-          <span className="text-xs text-slate-400">
+          <span className="text-xs text-slate-500 font-medium">
             {queueItems.length} cambio(s) pendiente(s)
           </span>
         </div>
 
         {isLoading ? (
-          <div className="p-8 text-center text-slate-500 text-xs">Examinando cola local...</div>
+          <div className="p-8 text-center text-slate-400 text-xs">Examinando cola local...</div>
         ) : queueItems.length === 0 ? (
           <div className="p-12 text-center">
-            <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-2 opacity-80" />
-            <h4 className="text-sm font-semibold text-white mb-1">¡Todo está sincronizado!</h4>
-            <p className="text-xs text-slate-400 max-w-sm mx-auto">
-              No hay cambios pendientes en tu almacenamiento local. Todos los registros coinciden con
-              Supabase.
+            <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-2 opacity-80" />
+            <h4 className="text-sm font-bold text-slate-800 mb-1">¡Todo está sincronizado!</h4>
+            <p className="text-xs text-slate-500 max-w-sm mx-auto">
+              No hay cambios pendientes en tu almacenamiento local. Todos los registros coinciden con la nube.
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-300">
-              <thead className="bg-slate-800/60 uppercase font-semibold text-slate-400 border-b border-slate-800">
-                <tr>
-                  <th className="px-4 py-3">Tabla</th>
-                  <th className="px-4 py-3">Acción</th>
-                  <th className="px-4 py-3">ID Registro</th>
-                  <th className="px-4 py-3">Intentos</th>
-                  <th className="px-4 py-3">Fecha</th>
-                  <th className="px-4 py-3">Estado</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800">
-                {queueItems.map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-800/30 transition-colors">
-                    <td className="px-4 py-3 font-mono font-medium text-white">{item.tableName}</td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                          item.action === 'insert'
-                            ? 'bg-emerald-500/20 text-emerald-400'
-                            : item.action === 'update'
-                            ? 'bg-blue-500/20 text-blue-400'
-                            : 'bg-rose-500/20 text-rose-400'
-                        }`}
-                      >
-                        {item.action}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 font-mono text-slate-400 truncate max-w-[150px]">
-                      {item.recordId}
-                    </td>
-                    <td className="px-4 py-3 font-semibold text-slate-300">{item.attempts}</td>
-                    <td className="px-4 py-3 text-slate-400">
-                      <span className="inline-flex items-center gap-1">
-                        <Clock className="w-3 h-3 text-slate-500" />
-                        {new Date(item.createdAt).toLocaleTimeString()}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                        {item.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Tabla</TableHead>
+                <TableHead>Acción</TableHead>
+                <TableHead>ID Registro</TableHead>
+                <TableHead>Intentos</TableHead>
+                <TableHead>Fecha</TableHead>
+                <TableHead>Estado</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {queueItems.map((item) => (
+                <TableRow key={item.id}>
+                  <TableCell className="font-mono font-medium text-slate-800">{item.tableName}</TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={
+                        item.action === 'insert'
+                          ? 'success'
+                          : item.action === 'update'
+                          ? 'default'
+                          : 'destructive'
+                      }
+                      className="uppercase text-[10px]"
+                    >
+                      {item.action}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="font-mono text-slate-500 truncate max-w-[150px]">
+                    {item.recordId}
+                  </TableCell>
+                  <TableCell className="font-semibold text-slate-700">{item.attempts}</TableCell>
+                  <TableCell className="text-slate-500">
+                    <span className="inline-flex items-center gap-1 text-xs">
+                      <Clock className="w-3.5 h-3.5 text-slate-400" />
+                      {new Date(item.createdAt).toLocaleTimeString()}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="warning" className="text-[10px]">
+                      {item.status}
+                    </Badge>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         )}
-      </div>
+      </Card>
     </div>
   )
 }

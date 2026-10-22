@@ -5,10 +5,18 @@ export const ROUTES = {
   // Rutas públicas / Auth
   LOGIN: '/login',
 
-  // Rutas protegidas
+  // Rutas protegidas (Figma)
   ROOT: '/',
+  PRESCRIPTIONS: '/surtimiento-recetas',
+  SUPPLY_ENTRY: '/entrada-insumos',
+  INVENTORY: '/inventario',
+  EXPORT: '/exportar-inventario',
+  SETTINGS: '/configuracion',
+  MASTER_CATALOG: '/catalogo-maestro',
+  CLINIC_SUPERVISION: '/supervision-clinicas',
+
+  // Rutas complementarias / existentes
   DASHBOARD: '/dashboard',
-  INVENTORY: '/inventory',
   SYNC: '/sync',
 
   // Fallback

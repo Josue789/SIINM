@@ -8,18 +8,15 @@ import { LoginPage } from '../pages/auth/LoginPage'
 import { DashboardPage } from '../pages/dashboard/DashboardPage'
 import { InventoryPage } from '../pages/inventory/InventoryPage'
 import { SyncPage } from '../pages/sync/SyncPage'
+import { PrescriptionsPage } from '../pages/prescriptions/PrescriptionsPage'
+import { SupplyEntryPage } from '../pages/supply-entry/SupplyEntryPage'
+import { ExportPage } from '../pages/export/ExportPage'
+import { SettingsPage } from '../pages/settings/SettingsPage'
+import { CatalogPage } from '../pages/catalog/CatalogPage'
+import { SupervisionPage } from '../pages/supervision/SupervisionPage'
 import { NotFoundPage } from '../pages/not-found/NotFoundPage'
 import { ROUTES } from './routes'
 
-/**
- * Árbol de enrutamiento principal de SIINM:
- *
- * 1. RootLayout: Provee AuthContext y NetworkContext a nivel global.
- * 2. PublicRoute (/login): Redirige al Dashboard si ya existe sesión (offline o live).
- * 3. ProtectedRoute (/dashboard, /inventory, /sync): Redirige a /login si no hay sesión autenticada.
- * 4. Redirección raíz (/ -> /dashboard).
- * 5. Catch-all (*): Redirige o muestra pantalla 404 amigable.
- */
 export const router = createBrowserRouter([
   {
     element: <RootLayout />,
@@ -40,7 +37,7 @@ export const router = createBrowserRouter([
         ],
       },
 
-      // Rutas Protegidas del Sistema
+      // Rutas Protegidas del Sistema (Figma Layout)
       {
         element: <ProtectedRoute />,
         children: [
@@ -49,15 +46,41 @@ export const router = createBrowserRouter([
             children: [
               {
                 path: ROUTES.ROOT,
-                element: <Navigate to={ROUTES.DASHBOARD} replace />,
+                element: <Navigate to={ROUTES.PRESCRIPTIONS} replace />,
               },
               {
-                path: ROUTES.DASHBOARD,
-                element: <DashboardPage />,
+                path: ROUTES.PRESCRIPTIONS,
+                element: <PrescriptionsPage />,
+              },
+              {
+                path: ROUTES.SUPPLY_ENTRY,
+                element: <SupplyEntryPage />,
               },
               {
                 path: ROUTES.INVENTORY,
                 element: <InventoryPage />,
+              },
+              {
+                path: ROUTES.EXPORT,
+                element: <ExportPage />,
+              },
+              {
+                path: ROUTES.SETTINGS,
+                element: <SettingsPage />,
+              },
+              {
+                path: ROUTES.MASTER_CATALOG,
+                element: <CatalogPage />,
+              },
+              {
+                path: ROUTES.CLINIC_SUPERVISION,
+                element: <SupervisionPage />,
+              },
+
+              // Compatibilidad con vistas previas
+              {
+                path: ROUTES.DASHBOARD,
+                element: <DashboardPage />,
               },
               {
                 path: ROUTES.SYNC,

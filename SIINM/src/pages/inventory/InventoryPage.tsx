@@ -1,12 +1,28 @@
-import React, { useEffect, useState, useCallback } from 'react'
-import { Plus, Package, Calendar, Tag, AlertTriangle } from 'lucide-react'
-import { medicineRepository } from '../../db/repositories/medicine.repository'
-import { useNetwork } from '../../context/NetworkContext'
-import type { Medicine } from '../../types/inventory.types'
+import React, { useEffect, useState, useCallback, useMemo } from 'react'
+import { Plus, Search, AlertTriangle, Trash2 } from 'lucide-react'
+import { medicineRepository } from '@/db/repositories/medicine.repository'
+import { useNetwork } from '@/context/NetworkContext'
+import type { Medicine } from '@/types/inventory.types'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
+import { Card } from '@/components/ui/card'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+
+type FilterMode = 'todos' | 'caducan' | 'diez_dias'
 
 export const InventoryPage: React.FC = () => {
   const [medicines, setMedicines] = useState<Medicine[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [filterMode, setFilterMode] = useState<FilterMode>('todos')
+  const [searchQuery, setSearchQuery] = useState('')
   const { refreshPendingCount } = useNetwork()
 
   const loadMedicines = useCallback(async () => {
@@ -26,25 +42,25 @@ export const InventoryPage: React.FC = () => {
   // Crear un medicamento de prueba directamente en Dexie y encolar
   const handleAddSampleMedicine = async () => {
     const sampleNames = [
-      { name: 'Paracetamol 500mg', code: 'MED-001', category: 'Analgésicos', form: 'Tabletas', price: 45 },
-      { name: 'Amoxicilina 875mg', code: 'MED-002', category: 'Antibióticos', form: 'Cápsulas', price: 120 },
-      { name: 'Ibuprofeno 400mg', code: 'MED-003', category: 'Antiinflamatorios', form: 'Comprimidos', price: 60 },
-      { name: 'Omeprazol 20mg', code: 'MED-004', category: 'Antiácidos', form: 'Cápsulas', price: 85 },
-      { name: 'Loratadina 10mg', code: 'MED-005', category: 'Antihistamínicos', form: 'Jarabe', price: 70 },
+      { name: 'paracetamol', code: '00100', category: 'Analgésicos', form: 'Tab 500mg', price: 45, lote: '00000', days: 5 },
+      { name: 'amoxicilina', code: '00101', category: 'Antibióticos', form: 'Cap 500mg', price: 120, lote: 'AH224', days: 120 },
+      { name: 'ibuprofeno', code: '00102', category: 'Antiinflamatorios', form: 'Tab 400mg', price: 60, lote: 'B5541', days: 8 },
+      { name: 'penicilina g', code: '010.000.0410.00', category: 'Antibióticos', form: 'Tab C/20', price: 85, lote: 'AH224', days: 2 },
+      { name: 'cloranfenicol', code: '00105', category: 'Oftálmicos', form: 'Solución', price: 70, lote: 'CL890', days: 45 },
     ]
 
     const item = sampleNames[Math.floor(Math.random() * sampleNames.length)]
 
     await medicineRepository.create({
-      code: `${item.code}-${Math.floor(Math.random() * 1000)}`,
+      code: item.code,
       name: item.name,
       category: item.category,
       dosageForm: item.form,
-      stock: Math.floor(Math.random() * 50) + 10,
-      minStock: 10,
+      stock: Math.floor(Math.random() * 20) + 1,
+      minStock: 5,
       price: item.price,
-      batchNumber: `LOTE-${new Date().getFullYear()}`,
-      expirationDate: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      batchNumber: item.lote,
+      expirationDate: new Date(Date.now() + item.days * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     })
 
     await loadMedicines()
@@ -57,113 +73,192 @@ export const InventoryPage: React.FC = () => {
     await refreshPendingCount()
   }
 
+  // Check if expiration date is within N days
+  const isExpiringSoon = (expirationDate?: string, maxDays = 30) => {
+    if (!expirationDate) return false
+    const exp = new Date(expirationDate).getTime()
+    const now = Date.now()
+    const diffDays = (exp - now) / (1000 * 60 * 60 * 24)
+    return diffDays <= maxDays
+  }
+
+  const filteredMedicines = useMemo(() => {
+    return medicines.filter((m) => {
+      // Búsqueda por texto
+      const matchesSearch =
+        m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        m.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (m.batchNumber && m.batchNumber.toLowerCase().includes(searchQuery.toLowerCase()))
+
+      if (!matchesSearch) return false
+
+      // Filtros por píldoras
+      if (filterMode === 'caducan') {
+        return isExpiringSoon(m.expirationDate, 30)
+      }
+      if (filterMode === 'diez_dias') {
+        return isExpiringSoon(m.expirationDate, 10)
+      }
+
+      return true
+    })
+  }, [medicines, searchQuery, filterMode])
+
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
+    <div className="space-y-6 max-w-7xl mx-auto">
+      {/* Encabezado Principal según Figma */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white mb-1">Inventario de Medicamentos</h1>
-          <p className="text-xs text-slate-400">
-            Registro local instantáneo (IndexedDB) con sincronización transparente a Supabase.
+          <h1 className="text-xl md:text-2xl font-black text-slate-800 tracking-wide uppercase m-0">
+            Inventario de Insumo
+          </h1>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Consulta general de existencias, lotes y estados de caducidad
           </p>
         </div>
 
-        <button
+        <Button
           onClick={handleAddSampleMedicine}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-semibold text-xs transition-all shadow-lg shadow-emerald-500/20 shrink-0 self-start sm:self-auto"
+          className="shrink-0 self-start sm:self-auto gap-2"
         >
           <Plus className="w-4 h-4" />
-          <span>Agregar Medicamento Demo (Offline)</span>
-        </button>
+          <span>+ Añadir medicamento demo</span>
+        </Button>
       </div>
 
+      {/* Barra de Filtros y Búsqueda según Figma Desktop - 3 */}
+      <Card className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        {/* Píldoras de Filtro */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-2">
+            Filtrar Medicamentos:
+          </span>
+          <Button
+            size="sm"
+            variant={filterMode === 'todos' ? 'default' : 'secondary'}
+            onClick={() => setFilterMode('todos')}
+          >
+            Todos
+          </Button>
+          <Button
+            size="sm"
+            variant={filterMode === 'caducan' ? 'default' : 'secondary'}
+            onClick={() => setFilterMode('caducan')}
+          >
+            Caducan
+          </Button>
+          <Button
+            size="sm"
+            variant={filterMode === 'diez_dias' ? 'default' : 'secondary'}
+            onClick={() => setFilterMode('diez_dias')}
+          >
+            &lt;10 días
+          </Button>
+        </div>
+
+        {/* Campo de Búsqueda */}
+        <div className="relative w-full md:w-72">
+          <Input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Buscar medicamento..."
+            className="pr-9 h-9 text-xs"
+          />
+          <Search className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+        </div>
+      </Card>
+
+      {/* Tabla de Medicamentos con componentes shadcn/ui */}
       {isLoading ? (
-        <div className="p-12 text-center text-slate-500 text-sm">Cargando base de datos local...</div>
-      ) : medicines.length === 0 ? (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center">
-          <div className="w-12 h-12 rounded-2xl bg-slate-800 flex items-center justify-center mx-auto mb-4 text-slate-400">
-            <Package className="w-6 h-6" />
-          </div>
-          <h3 className="text-base font-semibold text-white mb-1">No hay medicamentos aún</h3>
-          <p className="text-xs text-slate-400 max-w-md mx-auto mb-6">
-            Comienza agregando un medicamento. Se guardará de inmediato en Dexie y se preparará para
-            subir a Supabase en cuanto tengas conexión.
+        <Card className="p-12 text-center text-slate-500 text-sm">
+          Cargando inventario local...
+        </Card>
+      ) : filteredMedicines.length === 0 ? (
+        <Card className="p-12 text-center">
+          <p className="text-sm font-semibold text-slate-700 mb-1">No se encontraron medicamentos</p>
+          <p className="text-xs text-slate-400 mb-4">
+            {searchQuery
+              ? 'Intenta con otro término de búsqueda o limpia los filtros.'
+              : 'Agrega medicamentos para visualizarlos en el catálogo.'}
           </p>
-          <button
+          <Button
+            variant="outline"
             onClick={handleAddSampleMedicine}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition-colors"
+            className="gap-2 text-blue-600 border-blue-200 hover:bg-blue-50"
           >
             <Plus className="w-4 h-4" />
-            <span>Crear primer registro local</span>
-          </button>
-        </div>
+            <span>Crear primer medicamento demo</span>
+          </Button>
+        </Card>
       ) : (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-300">
-              <thead className="bg-slate-800/60 uppercase font-semibold text-slate-400 border-b border-slate-800">
-                <tr>
-                  <th className="px-4 py-3">Código</th>
-                  <th className="px-4 py-3">Medicamento</th>
-                  <th className="px-4 py-3">Categoría</th>
-                  <th className="px-4 py-3">Stock</th>
-                  <th className="px-4 py-3">Vencimiento</th>
-                  <th className="px-4 py-3">Estado Local</th>
-                  <th className="px-4 py-3 text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800">
-                {medicines.map((m) => (
-                  <tr key={m.id} className="hover:bg-slate-800/30 transition-colors">
-                    <td className="px-4 py-3 font-mono font-medium text-emerald-400">{m.code}</td>
-                    <td className="px-4 py-3 font-medium text-white">
+        <Card className="overflow-hidden p-0 border border-slate-200/80">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>SSA</TableHead>
+                <TableHead>Medicamento</TableHead>
+                <TableHead>Lote</TableHead>
+                <TableHead>Fech. caducidad</TableHead>
+                <TableHead>Stock</TableHead>
+                <TableHead className="text-right">Operaciones</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredMedicines.map((m) => {
+                const criticalExpiry = isExpiringSoon(m.expirationDate, 15)
+                return (
+                  <TableRow key={m.id}>
+                    <TableCell className="font-mono font-medium text-slate-700">
+                      {m.code || '00000'}
+                    </TableCell>
+                    <TableCell className="font-semibold text-slate-800">
                       <div>{m.name}</div>
-                      <span className="text-[10px] text-slate-500">{m.dosageForm}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 text-[11px]">
-                        <Tag className="w-3 h-3 text-slate-500" />
-                        {m.category}
+                      <span className="text-[10px] text-slate-400 font-normal">
+                        {m.dosageForm || m.category}
                       </span>
-                    </td>
-                    <td className="px-4 py-3 font-semibold text-white">
-                      {m.stock}{' '}
-                      {m.stock <= m.minStock && (
-                        <span className="text-amber-400 inline-flex items-center gap-0.5 ml-1" title="Stock bajo">
-                          <AlertTriangle className="w-3 h-3" />
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-slate-400">
-                      <span className="inline-flex items-center gap-1">
-                        <Calendar className="w-3 h-3 text-slate-500" />
-                        {m.expirationDate || 'N/A'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      {m.isLocalOnly ? (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                          Pendiente de Sync
-                        </span>
+                    </TableCell>
+                    <TableCell className="font-mono text-slate-600">
+                      {m.batchNumber || '00000'}
+                    </TableCell>
+                    <TableCell>
+                      {criticalExpiry ? (
+                        <Badge variant="destructive">
+                          {m.expirationDate || 'N/A'}
+                        </Badge>
                       ) : (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                          Sincronizado
+                        <span className="text-slate-700 font-medium">
+                          {m.expirationDate || 'N/A'}
                         </span>
                       )}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <button
+                    </TableCell>
+                    <TableCell className="font-bold text-slate-800">
+                      <span className="inline-flex items-center gap-1.5">
+                        {m.stock}
+                        {m.stock <= m.minStock && (
+                          <span title="Stock bajo">
+                            <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                          </span>
+                        )}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        size="icon"
+                        variant="ghost"
                         onClick={() => handleDelete(m.id)}
-                        className="text-rose-400 hover:text-rose-300 font-medium text-xs px-2 py-1 rounded hover:bg-rose-500/10 transition-colors"
+                        title="Eliminar registro"
+                        className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
                       >
-                        Eliminar
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+        </Card>
       )}
     </div>
   )
