@@ -1,9 +1,17 @@
-import React, { useState } from 'react'
-import { Plus, Search, MoreVertical } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
-import { Card } from '@/components/ui/card'
+import React, { useState } from "react";
+import {
+  Plus,
+  Search,
+  MoreVertical,
+  PencilIcon,
+  Trash2Icon,
+  EyeOff,
+  EyeIcon,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
 
 import {
   Dialog,
@@ -13,7 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from '@/components/ui/dialog'
+} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -21,73 +29,94 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table'
+} from "@/components/ui/table";
+import { DropdownMenuItem } from "@radix-ui/react-dropdown-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export const CatalogPage: React.FC = () => {
-  const [search, setSearch] = useState('')
-  const [filter, setFilter] = useState('todos')
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [newSsa, setNewSsa] = useState('')
-  const [newMedicine, setNewMedicine] = useState('')
-  const [newPresentation, setNewPresentation] = useState('')
-  const [newQuantity, setNewQuantity] = useState('1')
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("todos");
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [newSsa, setNewSsa] = useState("");
+  const [newMedicine, setNewMedicine] = useState("");
+  const [newPresentation, setNewPresentation] = useState("");
+  const [newQuantity, setNewQuantity] = useState("1");
 
   const [catalogItems, setCatalogItems] = useState([
     {
-      id: '1',
-      ssa: '00100',
-      medicamento: 'paracetamol',
-      presentacion: '25 mg',
+      id: "1",
+      ssa: "00100",
+      medicamento: "paracetamol",
+      presentacion: "25 mg",
       cantidadPorPieza: 5,
-      estatus: 'Activo',
+      estatus: "Activo",
     },
     {
-      id: '2',
-      ssa: '00101',
-      medicamento: 'amoxicilina',
-      presentacion: '500 mg',
+      id: "2",
+      ssa: "00101",
+      medicamento: "amoxicilina",
+      presentacion: "500 mg",
       cantidadPorPieza: 20,
-      estatus: 'Activo',
+      estatus: "Activo",
     },
     {
-      id: '3',
-      ssa: '010.000.0410.00',
-      medicamento: 'penicilina g',
-      presentacion: '100 mg (Tab C/20)',
+      id: "3",
+      ssa: "010.000.0410.00",
+      medicamento: "penicilina g",
+      presentacion: "100 mg (Tab C/20)",
       cantidadPorPieza: 20,
-      estatus: 'Activo',
+      estatus: "Activo",
     },
-  ])
+  ]);
+
+  const updateMedicineStatus = (id: string, newStatus: string) => {
+    setCatalogItems((prev) =>
+      prev.map((item) =>
+        item.id === id ? { ...item, estatus: newStatus } : item,
+      ),
+    );
+  };
 
   const handleAddMedicine = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!newMedicine.trim()) return
+    e.preventDefault();
+    if (!newMedicine.trim()) return;
 
     setCatalogItems((prev) => [
       ...prev,
       {
         id: Date.now().toString(),
-        ssa: newSsa.trim() || '00000',
+        ssa: newSsa.trim() || "00000",
         medicamento: newMedicine.trim(),
-        presentacion: newPresentation.trim() || 'Pieza',
+        presentacion: newPresentation.trim() || "Pieza",
         cantidadPorPieza: parseInt(newQuantity) || 1,
-        estatus: 'Activo',
+        estatus: "Activo",
       },
-    ])
+    ]);
 
-    setNewSsa('')
-    setNewMedicine('')
-    setNewPresentation('')
-    setNewQuantity('1')
-    setIsDialogOpen(false)
-  }
+    setNewSsa("");
+    setNewMedicine("");
+    setNewPresentation("");
+    setNewQuantity("1");
+    setIsDialogOpen(false);
+  };
 
   const filteredItems = catalogItems.filter((item) => {
     const matchesSearch =
       item.medicamento.toLowerCase().includes(search.toLowerCase()) ||
-      item.ssa.toLowerCase().includes(search.toLowerCase())
-    return matchesSearch
-  })
+      item.ssa.toLowerCase().includes(search.toLowerCase());
+    if (filter === "todos") {
+      return matchesSearch;
+    } else {
+      return item.estatus.toLowerCase() === filter && matchesSearch;
+    }
+  });
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -97,7 +126,8 @@ export const CatalogPage: React.FC = () => {
             Catálogo Maestro
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Catálogo institucional de medicamentos, cuadros básicos y especificaciones
+            Catálogo institucional de medicamentos, cuadros básicos y
+            especificaciones
           </p>
         </div>
 
@@ -113,7 +143,8 @@ export const CatalogPage: React.FC = () => {
               <DialogHeader>
                 <DialogTitle>Añadir Nuevo Medicamento</DialogTitle>
                 <DialogDescription>
-                  Ingresa los detalles técnicos del medicamento para darlo de alta en el catálogo maestro.
+                  Ingresa los detalles técnicos del medicamento para darlo de
+                  alta en el catálogo maestro.
                 </DialogDescription>
               </DialogHeader>
 
@@ -176,9 +207,7 @@ export const CatalogPage: React.FC = () => {
                 >
                   Cancelar
                 </Button>
-                <Button type="submit">
-                  Guardar Medicamento
-                </Button>
+                <Button type="submit">Guardar Medicamento</Button>
               </DialogFooter>
             </form>
           </DialogContent>
@@ -192,17 +221,24 @@ export const CatalogPage: React.FC = () => {
           </span>
           <Button
             size="sm"
-            variant={filter === 'todos' ? 'default' : 'secondary'}
-            onClick={() => setFilter('todos')}
+            variant={filter === "todos" ? "default" : "secondary"}
+            onClick={() => setFilter("todos")}
           >
             Todos
           </Button>
           <Button
             size="sm"
-            variant={filter === 'cuadro_basico' ? 'default' : 'secondary'}
-            onClick={() => setFilter('cuadro_basico')}
+            variant={filter === "activo" ? "default" : "secondary"}
+            onClick={() => setFilter("activo")}
           >
-            Cuadro básico
+            Activos
+          </Button>
+          <Button
+            size="sm"
+            variant={filter === "inactivo" ? "default" : "secondary"}
+            onClick={() => setFilter("inactivo")}
+          >
+            Inactivos
           </Button>
         </div>
 
@@ -221,7 +257,7 @@ export const CatalogPage: React.FC = () => {
       <Card className="overflow-hidden p-0 border border-slate-200/80">
         <Table>
           <TableHeader>
-            <TableRow>
+            <TableRow className="border-0 bg-gray-100">
               <TableHead>SSA</TableHead>
               <TableHead>Medicamento</TableHead>
               <TableHead>Presentación</TableHead>
@@ -232,31 +268,81 @@ export const CatalogPage: React.FC = () => {
           </TableHeader>
           <TableBody>
             {filteredItems.map((item) => (
-              <TableRow key={item.id}>
-                <TableCell className="font-mono font-medium text-slate-700">{item.ssa}</TableCell>
-                <TableCell className="font-semibold text-slate-800">{item.medicamento}</TableCell>
-                <TableCell className="text-slate-600">{item.presentacion}</TableCell>
-                <TableCell className="text-slate-800 font-medium">{item.cantidadPorPieza}</TableCell>
+              <TableRow key={item.id} className="border-0">
+                <TableCell className="font-mono font-medium text-slate-700">
+                  {item.ssa}
+                </TableCell>
+                <TableCell className="font-semibold text-slate-800">
+                  {item.medicamento}
+                </TableCell>
+                <TableCell className="text-slate-600">
+                  {item.presentacion}
+                </TableCell>
+                <TableCell className="text-slate-800 font-medium">
+                  {item.cantidadPorPieza}
+                </TableCell>
                 <TableCell>
-                  <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
+                  <Badge
+                    variant="outline"
+                    className={`${
+                      item.estatus === "Activo"
+                        ? "border-emerald-200 bg-emerald-50"
+                        : "border-red-200 bg-red-50"
+                    }`}
+                  >
                     {item.estatus}
                   </Badge>
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-8 w-8 text-slate-400 hover:text-slate-600"
-                  >
-                    <MoreVertical className="w-4 h-4" />
-                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger>
+                      <Button variant="ghost">
+                        <MoreVertical className="w-4 h-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent className="dark:bg-white dark:border-gray-200">
+                      <DropdownMenuGroup>
+                        <DropdownMenuItem className="cursor-pointer dark:text-gray-800 hover:bg-gray-100">
+                          <div className="flex items-center">
+                            <PencilIcon className="w-4 h-4 mr-2" />
+                            <p>Editar</p>
+                          </div>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="cursor-pointer dark:text-gray-800 hover:bg-gray-100">
+                          <div className="flex items-center text-red-500">
+                            <Trash2Icon className="w-4 h-4 mr-2" />
+                            <p>Eliminar</p>
+                          </div>
+                        </DropdownMenuItem>
+                      </DropdownMenuGroup>
+                      <DropdownMenuItem
+                        className="cursor-pointer dark:text-gray-800 hover:bg-gray-100 border-t-gray-100 border-t-2"
+                        onClick={(e) => {
+                          const newStatus =
+                            item.estatus === "Activo" ? "Inactivo" : "Activo";
+                          updateMedicineStatus(item.id, newStatus);
+                        }}
+                      >
+                        {item.estatus == "Activo" ? (
+                          <div className="flex items-center text-red-500">
+                            <EyeOff className="w-4 h-4 mr-2" />
+                            <p>Desactivar</p>
+                          </div>
+                        ) : (
+                          <div className="flex items-center text-green-500">
+                            <EyeIcon className="w-4 h-4 mr-2" />
+                            <p>Activar</p>
+                          </div>
+                        )}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </Card>
-      
     </div>
-  )
-}
+  );
+};
