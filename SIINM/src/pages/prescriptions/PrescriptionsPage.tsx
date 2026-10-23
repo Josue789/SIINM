@@ -1,17 +1,26 @@
 import React, { useState } from "react";
-import { Barcode, Trash2, Check, X, Search } from "lucide-react";
+import { Trash2, Check, X, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
-  DialogClose,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
+
+interface PrescriptionMedication {
+  id: string;
+  name: string;
+  lote: string;
+  caducidad: string;
+  quantity: number;
+  stock: number;
+  ssa: string;
+  barcode: string;
+}
 
 export const PrescriptionsPage: React.FC = () => {
   const [recipeFolio, setRecipeFolio] = useState("");
@@ -20,7 +29,7 @@ export const PrescriptionsPage: React.FC = () => {
   const [search, setSearch] = useState("");
 
   //Lista de medicamentos
-  const [medications, setMedications] = useState([
+  const [medications] = useState<PrescriptionMedication[]>([
     {
       name: "Pentoxifilina tablets",
       lote: "PENT-12345",
@@ -74,7 +83,7 @@ export const PrescriptionsPage: React.FC = () => {
   ]);
 
   // Medicamentos agregados
-  const [addedItems, setAddedItems] = useState([]);
+  const [addedItems, setAddedItems] = useState<PrescriptionMedication[]>([]);
 
   const handleRemoveItem = (id: string) => {
     setAddedItems((prev) => prev.filter((item) => item.id !== id));
@@ -92,7 +101,7 @@ export const PrescriptionsPage: React.FC = () => {
     );
   };
 
-  const handleAddItem = (item: any) => {
+  const handleAddItem = (item: PrescriptionMedication) => {
     const exists = addedItems.find((i) => i.id === item.id);
     if (exists) {
       handleUpdateQuantity(item.id, 1);
@@ -287,15 +296,17 @@ export const PrescriptionsPage: React.FC = () => {
           <DialogTitle>Lista de medicamentos</DialogTitle>
           <DialogDescription>
             <p>Busca el medicamento que deseas agregar a la receta</p>
-            <Input
-              placeholder="Buscar medicamento"
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-              }}
-              className="my-4"
-              suffix={<Search className="w-4 h-4 text-slate-400" />}
-            />
+            <div className="relative my-4">
+              <Input
+                placeholder="Buscar medicamento"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                }}
+                className="pr-10"
+              />
+              <Search className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
             {filteredMedications.map((item) => (
               <Card
                 onClick={() => {

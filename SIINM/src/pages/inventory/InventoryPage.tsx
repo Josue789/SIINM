@@ -1,12 +1,12 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react'
-import { Plus, Search, AlertTriangle, Trash2 } from 'lucide-react'
-import { medicineRepository } from '@/db/repositories/medicine.repository'
-import { useNetwork } from '@/context/NetworkContext'
-import type { Medicine } from '@/types/inventory.types'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
-import { Card } from '@/components/ui/card'
+import React, { useEffect, useState, useCallback, useMemo } from "react";
+import { Plus, Search, AlertTriangle, Trash2 } from "lucide-react";
+import { medicineRepository } from "@/db/repositories/medicine.repository";
+import { useNetwork } from "@/context/NetworkContext";
+import type { Medicine } from "@/types/inventory.types";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -14,73 +14,45 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table'
+} from "@/components/ui/table";
 
-type FilterMode = 'todos' | 'caducan' | 'diez_dias'
+type FilterMode = "todos" | "caducan" | "diez_dias";
 
 export const InventoryPage: React.FC = () => {
-  const [medicines, setMedicines] = useState<Medicine[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [filterMode, setFilterMode] = useState<FilterMode>('todos')
-  const [searchQuery, setSearchQuery] = useState('')
-  const { refreshPendingCount } = useNetwork()
+  const [medicines, setMedicines] = useState<Medicine[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [filterMode, setFilterMode] = useState<FilterMode>("todos");
+  const [searchQuery, setSearchQuery] = useState("");
+  const { refreshPendingCount } = useNetwork();
 
   const loadMedicines = useCallback(async () => {
-    setIsLoading(true)
+    setIsLoading(true);
     try {
-      const items = await medicineRepository.getAll()
-      setMedicines(items)
+      const items = await medicineRepository.getAll();
+      setMedicines(items as unknown as Medicine[]);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }, [])
+  }, []);
 
   useEffect(() => {
-    loadMedicines()
-  }, [loadMedicines])
-
-  // Crear un medicamento de prueba directamente en Dexie y encolar
-  const handleAddSampleMedicine = async () => {
-    const sampleNames = [
-      { name: 'paracetamol', code: '00100', category: 'Analgésicos', form: 'Tab 500mg', price: 45, lote: '00000', days: 5 },
-      { name: 'amoxicilina', code: '00101', category: 'Antibióticos', form: 'Cap 500mg', price: 120, lote: 'AH224', days: 120 },
-      { name: 'ibuprofeno', code: '00102', category: 'Antiinflamatorios', form: 'Tab 400mg', price: 60, lote: 'B5541', days: 8 },
-      { name: 'penicilina g', code: '010.000.0410.00', category: 'Antibióticos', form: 'Tab C/20', price: 85, lote: 'AH224', days: 2 },
-      { name: 'cloranfenicol', code: '00105', category: 'Oftálmicos', form: 'Solución', price: 70, lote: 'CL890', days: 45 },
-    ]
-
-    const item = sampleNames[Math.floor(Math.random() * sampleNames.length)]
-
-    await medicineRepository.create({
-      code: item.code,
-      name: item.name,
-      category: item.category,
-      dosageForm: item.form,
-      stock: Math.floor(Math.random() * 20) + 1,
-      minStock: 5,
-      price: item.price,
-      batchNumber: item.lote,
-      expirationDate: new Date(Date.now() + item.days * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    })
-
-    await loadMedicines()
-    await refreshPendingCount()
-  }
+    loadMedicines();
+  }, [loadMedicines]);
 
   const handleDelete = async (id: string) => {
-    await medicineRepository.delete(id)
-    await loadMedicines()
-    await refreshPendingCount()
-  }
+    await medicineRepository.delete(id);
+    await loadMedicines();
+    await refreshPendingCount();
+  };
 
   // Check if expiration date is within N days
   const isExpiringSoon = (expirationDate?: string, maxDays = 30) => {
-    if (!expirationDate) return false
-    const exp = new Date(expirationDate).getTime()
-    const now = Date.now()
-    const diffDays = (exp - now) / (1000 * 60 * 60 * 24)
-    return diffDays <= maxDays
-  }
+    if (!expirationDate) return false;
+    const exp = new Date(expirationDate).getTime();
+    const now = Date.now();
+    const diffDays = (exp - now) / (1000 * 60 * 60 * 24);
+    return diffDays <= maxDays;
+  };
 
   const filteredMedicines = useMemo(() => {
     return medicines.filter((m) => {
@@ -88,21 +60,22 @@ export const InventoryPage: React.FC = () => {
       const matchesSearch =
         m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         m.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (m.batchNumber && m.batchNumber.toLowerCase().includes(searchQuery.toLowerCase()))
+        (m.batchNumber &&
+          m.batchNumber.toLowerCase().includes(searchQuery.toLowerCase()));
 
-      if (!matchesSearch) return false
+      if (!matchesSearch) return false;
 
       // Filtros por píldoras
-      if (filterMode === 'caducan') {
-        return isExpiringSoon(m.expirationDate, 30)
+      if (filterMode === "caducan") {
+        return isExpiringSoon(m.expirationDate, 30);
       }
-      if (filterMode === 'diez_dias') {
-        return isExpiringSoon(m.expirationDate, 10)
+      if (filterMode === "diez_dias") {
+        return isExpiringSoon(m.expirationDate, 10);
       }
 
-      return true
-    })
-  }, [medicines, searchQuery, filterMode])
+      return true;
+    });
+  }, [medicines, searchQuery, filterMode]);
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -118,11 +91,11 @@ export const InventoryPage: React.FC = () => {
         </div>
 
         <Button
-          onClick={handleAddSampleMedicine}
+          onClick={() => {}}
           className="shrink-0 self-start sm:self-auto gap-2"
         >
           <Plus className="w-4 h-4" />
-          <span>+ Añadir medicamento demo</span>
+          <span>+ Añadir medicamento</span>
         </Button>
       </div>
 
@@ -135,22 +108,22 @@ export const InventoryPage: React.FC = () => {
           </span>
           <Button
             size="sm"
-            variant={filterMode === 'todos' ? 'default' : 'secondary'}
-            onClick={() => setFilterMode('todos')}
+            variant={filterMode === "todos" ? "default" : "secondary"}
+            onClick={() => setFilterMode("todos")}
           >
             Todos
           </Button>
           <Button
             size="sm"
-            variant={filterMode === 'caducan' ? 'default' : 'secondary'}
-            onClick={() => setFilterMode('caducan')}
+            variant={filterMode === "caducan" ? "default" : "secondary"}
+            onClick={() => setFilterMode("caducan")}
           >
             Caducan
           </Button>
           <Button
             size="sm"
-            variant={filterMode === 'diez_dias' ? 'default' : 'secondary'}
-            onClick={() => setFilterMode('diez_dias')}
+            variant={filterMode === "diez_dias" ? "default" : "secondary"}
+            onClick={() => setFilterMode("diez_dias")}
           >
             &lt;10 días
           </Button>
@@ -176,19 +149,21 @@ export const InventoryPage: React.FC = () => {
         </Card>
       ) : filteredMedicines.length === 0 ? (
         <Card className="p-12 text-center">
-          <p className="text-sm font-semibold text-slate-700 mb-1">No se encontraron medicamentos</p>
+          <p className="text-sm font-semibold text-slate-700 mb-1">
+            No se encontraron medicamentos
+          </p>
           <p className="text-xs text-slate-400 mb-4">
             {searchQuery
-              ? 'Intenta con otro término de búsqueda o limpia los filtros.'
-              : 'Agrega medicamentos para visualizarlos en el catálogo.'}
+              ? "Intenta con otro término de búsqueda o limpia los filtros."
+              : "Agrega medicamentos para visualizarlos en el catálogo."}
           </p>
           <Button
             variant="outline"
-            onClick={handleAddSampleMedicine}
+            onClick={() => {}}
             className="gap-2 text-blue-600 border-blue-200 hover:bg-blue-50"
           >
             <Plus className="w-4 h-4" />
-            <span>Crear primer medicamento demo</span>
+            <span>Crear medicamento</span>
           </Button>
         </Card>
       ) : (
@@ -206,11 +181,11 @@ export const InventoryPage: React.FC = () => {
             </TableHeader>
             <TableBody>
               {filteredMedicines.map((m) => {
-                const criticalExpiry = isExpiringSoon(m.expirationDate, 15)
+                const criticalExpiry = isExpiringSoon(m.expirationDate, 15);
                 return (
                   <TableRow key={m.id}>
                     <TableCell className="font-mono font-medium text-slate-700">
-                      {m.code || '00000'}
+                      {m.code || "00000"}
                     </TableCell>
                     <TableCell className="font-semibold text-slate-800">
                       <div>{m.name}</div>
@@ -219,16 +194,16 @@ export const InventoryPage: React.FC = () => {
                       </span>
                     </TableCell>
                     <TableCell className="font-mono text-slate-600">
-                      {m.batchNumber || '00000'}
+                      {m.batchNumber || "00000"}
                     </TableCell>
                     <TableCell>
                       {criticalExpiry ? (
                         <Badge variant="destructive">
-                          {m.expirationDate || 'N/A'}
+                          {m.expirationDate || "N/A"}
                         </Badge>
                       ) : (
                         <span className="text-slate-700 font-medium">
-                          {m.expirationDate || 'N/A'}
+                          {m.expirationDate || "N/A"}
                         </span>
                       )}
                     </TableCell>
@@ -254,12 +229,12 @@ export const InventoryPage: React.FC = () => {
                       </Button>
                     </TableCell>
                   </TableRow>
-                )
+                );
               })}
             </TableBody>
           </Table>
         </Card>
       )}
     </div>
-  )
-}
+  );
+};

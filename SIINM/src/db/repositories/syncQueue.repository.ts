@@ -67,4 +67,14 @@ export const syncQueueRepository = {
       })
     }
   },
+
+  /**
+   * Restablece todos los elementos con estado 'failed' a 'pending' para reintentar sincronización.
+   */
+  async retryAllFailed(): Promise<void> {
+    const failedItems = await db.syncQueue.where('status').equals('failed').toArray()
+    for (const item of failedItems) {
+      await db.syncQueue.update(item.id, { status: 'pending', attempts: 0 })
+    }
+  },
 }

@@ -162,10 +162,10 @@ export const MainLayout: React.FC = () => {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs font-bold text-slate-800 truncate m-0 leading-tight">
-                {user?.fullName || 'Pedro Lopez'}
+                {user?.fullName || user?.email || 'Usuario'}
               </p>
               <p className="text-[10px] text-slate-500 font-medium truncate m-0 leading-tight uppercase">
-                {user?.role || 'Admin'}
+                {user?.role || 'Farmacéutico'}
               </p>
             </div>
             <button
