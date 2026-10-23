@@ -257,12 +257,14 @@ export const CatalogPage: React.FC = () => {
       <Card className="overflow-hidden p-0 border border-slate-200/80">
         <Table>
           <TableHeader>
-            <TableRow className="border-0 bg-gray-100">
-              <TableHead>SSA</TableHead>
-              <TableHead>Medicamento</TableHead>
-              <TableHead>Presentación</TableHead>
-              <TableHead>Cantidad por pieza</TableHead>
-              <TableHead>Estatus</TableHead>
+            <TableRow className="border-0 bg-gray-50">
+              <TableHead className="text-gray-800">SSA</TableHead>
+              <TableHead className="text-gray-800">Medicamento</TableHead>
+              <TableHead className="text-gray-800">Presentación</TableHead>
+              <TableHead className="text-gray-800">
+                Cantidad por pieza
+              </TableHead>
+              <TableHead className="text-gray-800">Estatus</TableHead>
               <TableHead className="text-right">Operaciones</TableHead>
             </TableRow>
           </TableHeader>
