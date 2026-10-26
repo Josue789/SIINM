@@ -80,6 +80,7 @@ export const CatalogPage: React.FC = () => {
       [] as CatalogoMedicamento[],
     ) || [];
 
+  //Actualiza su estatus de un medicamento (Activo/Inactivo)
   const updateMedicineStatus = async (id: string, newStatus: string) => {
     await medicineRepository.updateStatus(id, newStatus);
     if (isOnline) {
@@ -87,6 +88,7 @@ export const CatalogPage: React.FC = () => {
     }
   };
 
+  // Al dar enviar maneja si es editado o enviado
   const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (isAddingMedicine) {
@@ -96,6 +98,7 @@ export const CatalogPage: React.FC = () => {
     }
   };
 
+  // Manejo de actualizacion de medicamento
   const handleUpdateMedicine = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMedicine.trim()) return;
@@ -108,22 +111,29 @@ export const CatalogPage: React.FC = () => {
       cantidadPorPieza: parseInt(newQuantity) || 1,
       activo: true,
     };
-    await medicineRepository.update(idAtEdit, medicine);
 
-    if (isOnline) {
-      triggerSync().catch(console.error);
+    try {
+      await medicineRepository.update(idAtEdit, medicine);
+
+      if (isOnline) {
+        triggerSync().catch(console.error);
+      }
+
+      setIdAtEdit("");
+      setNewSsa("");
+      setNewMedicine("");
+      setNewPresentation("");
+      setNewQuantity("1");
+      setNewCode("");
+      setIsDialogOpen(false);
+      setIsAddingMedicine(true);
+      toast.success("Medicamento actualizado");
+    } catch (error) {
+      toast.error("Error al actualizar el medicamento");
     }
-
-    setIdAtEdit("");
-    setNewSsa("");
-    setNewMedicine("");
-    setNewPresentation("");
-    setNewQuantity("1");
-    setNewCode("");
-    setIsDialogOpen(false);
-    setIsAddingMedicine(true);
   };
 
+  // Manejo de agregar medicamento
   const handleAddMedicine = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMedicine.trim()) return;
@@ -139,34 +149,42 @@ export const CatalogPage: React.FC = () => {
     };
     try {
       await medicineRepository.create(medicine);
+      toast.success("Medicamento agregado");
+      if (isOnline) {
+        triggerSync().catch();
+      }
+
+      setNewSsa("");
+      setNewMedicine("");
+      setNewPresentation("");
+      setNewQuantity("1");
+      setNewCode("");
+      setIsDialogOpen(false);
     } catch (error) {
-      toast(medicine.codigo_barras + " ya existe en el catálogo");
+      if (error.message.includes("duplicado")) toast.error(error.message);
+      else toast.error("Error al añadir medicamento");
     }
-
-    if (isOnline) {
-      triggerSync().catch(console.error);
-    }
-
-    setNewSsa("");
-    setNewMedicine("");
-    setNewPresentation("");
-    setNewQuantity("1");
-    setNewCode("");
-    setIsDialogOpen(false);
   };
 
+  // Manejo de eliminacion de medicamento
   const confirmDelete = async () => {
     if (!itemToDelete || !codeConfirmation) return;
     if (codeConfirmation.trim() !== itemToDelete.codigo_barras.trim()) return;
-    await medicineRepository.delete(itemToDelete.id);
-    if (isOnline) {
-      triggerSync().catch(console.error);
+    try {
+      await medicineRepository.delete(itemToDelete.id);
+      if (isOnline) {
+        triggerSync().catch(console.error);
+      }
+      toast.success("Medicamento eliminado");
+      setIsDialogDelete(false);
+      setCodeConfirmation("");
+      setItemToDelete(null);
+    } catch (error) {
+      toast.error("Fallo al eliminar el medicamento");
     }
-    setIsDialogDelete(false);
-    setCodeConfirmation("");
-    setItemToDelete(null);
   };
 
+  // Funcionamiento de filtro y busqueda
   const filteredItems = catalogItems.filter((item) => {
     const medName = (item.medicamento || item.name || "").toLowerCase();
     const ssaCode = (item.clave_ssa || item.ssa || "").toLowerCase();
@@ -194,6 +212,7 @@ export const CatalogPage: React.FC = () => {
     return matchesSearch;
   });
 
+  // Carga los valores a editar al dialogo y activa bandera de edicion
   const openDialogToEdit = (item: CatalogoMedicamento) => {
     setIsAddingMedicine(false);
     setIsDialogOpen(true);

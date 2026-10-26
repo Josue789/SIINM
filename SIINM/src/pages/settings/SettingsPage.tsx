@@ -1,28 +1,34 @@
-import React from 'react'
-import { Users, Hospital, Pill, ChevronRight } from 'lucide-react'
-import { Card } from '@/components/ui/card'
+import React from "react";
+import { Users, Hospital, Pill, ChevronRight } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { useNavigate } from "react-router-dom";
 
 export const SettingsPage: React.FC = () => {
+  const navigate = useNavigate();
+
   const settingsOptions = [
     {
-      id: 'users',
-      title: 'Configurar usuarios',
-      desc: 'Administrar permisos, roles y accesos del personal',
+      id: "users",
+      title: "Configurar usuarios",
+      desc: "Administrar permisos, roles y accesos del personal",
       icon: Users,
+      sendTo: "/usuarios",
     },
     {
-      id: 'units',
-      title: 'Configurar unidades',
-      desc: 'Gestionar clínicas, almacenes y áreas de farmacia',
+      id: "units",
+      title: "Configurar unidades",
+      desc: "Gestionar clínicas, almacenes y áreas de farmacia",
       icon: Hospital,
+      sendTo: "/clinicas",
     },
     {
-      id: 'medicines-catalog',
-      title: 'Administrar catálogo de medicamentos',
-      desc: 'Claves SSA, presentaciones y cuadros básicos',
+      id: "medicines-catalog",
+      title: "Administrar catálogo de medicamentos",
+      desc: "Claves SSA, presentaciones y cuadros básicos",
       icon: Pill,
+      sendTo: "/catalogo-maestro",
     },
-  ]
+  ];
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
@@ -37,10 +43,11 @@ export const SettingsPage: React.FC = () => {
 
       <div className="space-y-3">
         {settingsOptions.map((opt) => {
-          const Icon = opt.icon
+          const Icon = opt.icon;
           return (
             <Card
               key={opt.id}
+              onClick={() => navigate(opt.sendTo)}
               className="p-4 hover:bg-slate-50/80 flex items-center justify-between transition-all group cursor-pointer"
             >
               <div className="flex items-center gap-3.5">
@@ -57,9 +64,9 @@ export const SettingsPage: React.FC = () => {
 
               <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all" />
             </Card>
-          )
+          );
         })}
       </div>
     </div>
-  )
-}
+  );
+};

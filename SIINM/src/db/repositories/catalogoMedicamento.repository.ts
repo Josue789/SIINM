@@ -3,74 +3,6 @@ import type { CatalogoMedicamento } from '../../types/inventory.types'
 import { syncQueueRepository } from './syncQueue.repository'
 import { v4 as uuidv4 } from 'uuid'
 
-export const INITIAL_CATALOG_MEDICINES: CatalogoMedicamento[] = [
-  {
-    id: '1',
-    codigo_barras: '750123456001',
-    clave_ssa: '00100',
-    medicamento: 'Paracetamol',
-    presentacion: '25 mg (Caja c/20)',
-    activo: true,
-    ssa: '00100',
-    estatus: 'Activo',
-    cantidadPorPieza: 5,
-  },
-  {
-    id: '2',
-    codigo_barras: '750123456002',
-    clave_ssa: '00101',
-    medicamento: 'Amoxicilina',
-    presentacion: '500 mg (Caja c/12)',
-    activo: true,
-    ssa: '00101',
-    estatus: 'Activo',
-    cantidadPorPieza: 20,
-  },
-  {
-    id: '3',
-    codigo_barras: '750123456003',
-    clave_ssa: '010.000.0410.00',
-    medicamento: 'Penicilina G',
-    presentacion: '100 mg (Tab C/20)',
-    activo: true,
-    ssa: '010.000.0410.00',
-    estatus: 'Activo',
-    cantidadPorPieza: 20,
-  },
-  {
-    id: '4',
-    codigo_barras: '750123456004',
-    clave_ssa: '010.000.0104.00',
-    medicamento: 'Ibuprofeno',
-    presentacion: '400 mg (Caja c/10)',
-    activo: true,
-    ssa: '010.000.0104.00',
-    estatus: 'Activo',
-    cantidadPorPieza: 10,
-  },
-  {
-    id: '5',
-    codigo_barras: '750123456005',
-    clave_ssa: '010.000.1205.00',
-    medicamento: 'Omeprazol',
-    presentacion: '20 mg (Caja c/14)',
-    activo: true,
-    ssa: '010.000.1205.00',
-    estatus: 'Activo',
-    cantidadPorPieza: 14,
-  },
-  {
-    id: '6',
-    codigo_barras: '750123456006',
-    clave_ssa: '010.000.2100.00',
-    medicamento: 'Metformina',
-    presentacion: '850 mg (Caja c/30)',
-    activo: true,
-    ssa: '010.000.2100.00',
-    estatus: 'Activo',
-    cantidadPorPieza: 30,
-  },
-]
 
 export const catalogoMedicamentoRepository = {
   /**
@@ -111,12 +43,9 @@ export const catalogoMedicamentoRepository = {
         return legacy.map(normalize)
       }
 
-      // Si la BD local está vacía, sembramos el catálogo base en Dexie (Offline-First)
-      await db.catalogo_medicamentos.bulkPut(INITIAL_CATALOG_MEDICINES)
-      await db.medicines.bulkPut(INITIAL_CATALOG_MEDICINES as any)
-      return INITIAL_CATALOG_MEDICINES.map(normalize)
+      
     } catch {
-      return INITIAL_CATALOG_MEDICINES.map(normalize)
+      
     }
   },
 
@@ -143,7 +72,7 @@ export const catalogoMedicamentoRepository = {
     const existingMedicineWithSameBarcode = existingMedicine.find(item => item.codigo_barras === data.codigo_barras)
     const existingMedicineWithSameSsa = existingMedicine.find(item => item.clave_ssa === data.clave_ssa)
     if (existingMedicineWithSameBarcode || existingMedicineWithSameSsa) {
-      throw new Error('El medicamento ya existe en el catálogo')
+      throw new Error('Clave ssa y/o codigo de barras duplicado')
     }
 
     // Procesa y agregar el medicamento a la bd local

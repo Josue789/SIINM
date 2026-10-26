@@ -14,6 +14,8 @@ export const ROUTES = {
   SETTINGS: '/configuracion',
   MASTER_CATALOG: '/catalogo-maestro',
   CLINIC_SUPERVISION: '/supervision-clinicas',
+  USERS_MANAGE: '/usuarios',
+  CLINICS_MANAGE: '/clinicas',
 
   // Rutas complementarias / existentes
   DASHBOARD: '/dashboard',

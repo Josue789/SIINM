@@ -12,6 +12,8 @@ import { PrescriptionsPage } from '../pages/prescriptions/PrescriptionsPage'
 import { SupplyEntryPage } from '../pages/supply-entry/SupplyEntryPage'
 import { ExportPage } from '../pages/export/ExportPage'
 import { SettingsPage } from '../pages/settings/SettingsPage'
+import { ClinicsPage } from '../pages/settings/clinicsPage'
+import { UsersPage } from '../pages/settings/usersPage'
 import { CatalogPage } from '../pages/catalog/CatalogPage'
 import { SupervisionPage } from '../pages/supervision/SupervisionPage'
 import { NotFoundPage } from '../pages/not-found/NotFoundPage'
@@ -75,6 +77,14 @@ export const router = createBrowserRouter([
               {
                 path: ROUTES.CLINIC_SUPERVISION,
                 element: <SupervisionPage />,
+              },
+              {
+                path: ROUTES.CLINICS_MANAGE,
+                element: <ClinicsPage />,
+              },
+              {
+                path: ROUTES.USERS_MANAGE,
+                element: <UsersPage />,
               },
 
               // Compatibilidad con vistas previas
