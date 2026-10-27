@@ -43,9 +43,9 @@ export const catalogoMedicamentoRepository = {
         return legacy.map(normalize)
       }
 
-      
+      return []
     } catch {
-      
+      return []
     }
   },
 

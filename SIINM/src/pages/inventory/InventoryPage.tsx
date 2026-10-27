@@ -1,8 +1,12 @@
-import React, { useEffect, useState, useCallback, useMemo } from "react";
-import { Plus, Search, AlertTriangle, Trash2 } from "lucide-react";
-import { medicineRepository } from "@/db/repositories/medicine.repository";
+import React, { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
+import { Plus, Search, AlertTriangle, Trash2, RefreshCw, Wifi, WifiOff } from "lucide-react";
+import { useLiveQuery } from "dexie-react-hooks";
+import { db } from "@/db";
 import { useNetwork } from "@/context/NetworkContext";
-import type { Medicine } from "@/types/inventory.types";
+import { useAuth } from "@/context/AuthContext";
+import { inventarioRepository } from "@/db/repositories/inventario.repository";
+import { ROUTES } from "@/router/routes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -15,91 +19,216 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { toast } from "react-toastify";
 
 type FilterMode = "todos" | "caducan" | "diez_dias";
 
+export interface DisplayInventoryItem {
+  id: string | number;
+  clave_ssa: string;
+  medicamento: string;
+  presentacion: string;
+  lote: string;
+  fecha_caducidad: string;
+  stock: number;
+}
+
+// Verifica si la fecha de caducidad está dentro del rango especificado
+const isExpiringSoon = (
+  expirationDate?: string,
+  maxDays = 30,
+  currentTimestamp = Date.now(),
+) => {
+  if (!expirationDate || expirationDate === "N/A") return false;
+
+  let expTime = 0;
+  if (expirationDate.includes("/")) {
+    const parts = expirationDate.split("/").map(Number);
+    if (parts.length === 2) {
+      const m = parts[0];
+      const y = parts[1] < 100 ? parts[1] + 2000 : parts[1];
+      expTime = new Date(y, m, 0).getTime();
+    }
+  } else {
+    expTime = new Date(expirationDate).getTime();
+  }
+
+  if (isNaN(expTime)) return false;
+  const diffDays = (expTime - currentTimestamp) / (1000 * 60 * 60 * 24);
+  return diffDays >= 0 && diffDays <= maxDays;
+};
+
 export const InventoryPage: React.FC = () => {
-  const [medicines, setMedicines] = useState<Medicine[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { isOnline, isSyncing, triggerSync, refreshPendingCount } = useNetwork();
   const [filterMode, setFilterMode] = useState<FilterMode>("todos");
   const [searchQuery, setSearchQuery] = useState("");
-  const { refreshPendingCount } = useNetwork();
+  const [currentTimestamp] = useState(() => Date.now());
 
-  const loadMedicines = useCallback(async () => {
-    setIsLoading(true);
+  // Función para sincronizar con Supabase manualmente
+  const handleSync = async () => {
     try {
-      const items = await medicineRepository.getAll();
-      setMedicines(items as unknown as Medicine[]);
-    } finally {
-      setIsLoading(false);
+      // 1. Sube registros locales que no se hayan subido aún
+      await inventarioRepository.pushUnsyncedLocal();
+      // 2. Descarga registros remotos para la clínica del usuario
+      if (user?.clinicaId) {
+        await inventarioRepository.pullFromRemote(user.clinicaId);
+      } else {
+        await inventarioRepository.pullFromRemote();
+      }
+      // 3. Sincroniza la cola de cambios pendientes
+      await triggerSync(true);
+      toast.success("Inventario sincronizado con Supabase");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Error al sincronizar con Supabase";
+      toast.error(msg);
     }
-  }, []);
-
-  useEffect(() => {
-    loadMedicines();
-  }, [loadMedicines]);
-
-  const handleDelete = async (id: string) => {
-    await medicineRepository.delete(id);
-    await loadMedicines();
-    await refreshPendingCount();
   };
 
-  // Check if expiration date is within N days
-  const isExpiringSoon = (expirationDate?: string, maxDays = 30) => {
-    if (!expirationDate) return false;
-    const exp = new Date(expirationDate).getTime();
-    const now = Date.now();
-    const diffDays = (exp - now) / (1000 * 60 * 60 * 24);
-    return diffDays <= maxDays;
+  // Consulta reactiva a Dexie: une inventario local y medicines
+  const inventoryItems = useLiveQuery(
+    async (): Promise<DisplayInventoryItem[]> => {
+      try {
+        const localInventario = await db.inventario.toArray();
+        if (localInventario && localInventario.length > 0) {
+          return localInventario.map((item) => ({
+            id:
+              item.id ||
+              `${item.id_clinica}-${item.id_medicamento}-${item.lote}`,
+            clave_ssa: item.clave_ssa || "",
+            medicamento: item.medicamento || "Medicamento sin nombre",
+            presentacion: item.presentacion || "Pieza",
+            lote: item.lote || "00000",
+            fecha_caducidad: item.fecha_caducidad || "N/A",
+            stock: Number(item.stock) || 0,
+          }));
+        }
+
+        // Fallback a db.medicines si aún no hay registros en db.inventario
+        const legacyMedicines = await db.medicines.toArray();
+        return legacyMedicines.map((m) => ({
+          id: m.id,
+          clave_ssa: m.clave_ssa || m.code || "",
+          medicamento: m.medicamento || m.name || "Medicamento",
+          presentacion: m.presentacion || m.dosageForm || "Pieza",
+          lote: m.batchNumber || "00000",
+          fecha_caducidad: m.expirationDate || "N/A",
+          stock: Number(m.stock) || 0,
+        }));
+      } catch (err) {
+        console.warn("Error al consultar inventario local:", err);
+        return [];
+      }
+    },
+    [],
+    [],
+  );
+
+  const handleDelete = async (id: string | number) => {
+    try {
+      await inventarioRepository.delete(id);
+      await refreshPendingCount();
+      toast.success("Registro eliminado del inventario");
+    } catch (err) {
+      console.error("Error al eliminar del inventario:", err);
+      toast.error("No se pudo eliminar el registro");
+    }
   };
 
   const filteredMedicines = useMemo(() => {
-    return medicines.filter((m) => {
-      // Búsqueda por texto
+    const query = searchQuery.trim().toLowerCase();
+
+    return (inventoryItems || []).filter((m) => {
+      const medName = (m.medicamento || "").toLowerCase();
+      const ssaCode = (m.clave_ssa || "").toLowerCase();
+      const batchNum = (m.lote || "").toLowerCase();
+
       const matchesSearch =
-        m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        m.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (m.batchNumber &&
-          m.batchNumber.toLowerCase().includes(searchQuery.toLowerCase()));
+        !query ||
+        medName.includes(query) ||
+        ssaCode.includes(query) ||
+        batchNum.includes(query);
 
       if (!matchesSearch) return false;
 
-      // Filtros por píldoras
       if (filterMode === "caducan") {
-        return isExpiringSoon(m.expirationDate, 30);
+        return isExpiringSoon(m.fecha_caducidad, 30, currentTimestamp);
       }
       if (filterMode === "diez_dias") {
-        return isExpiringSoon(m.expirationDate, 10);
+        return isExpiringSoon(m.fecha_caducidad, 10, currentTimestamp);
       }
 
       return true;
     });
-  }, [medicines, searchQuery, filterMode]);
+  }, [inventoryItems, searchQuery, filterMode, currentTimestamp]);
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Encabezado Principal según Figma */}
+      {/* Encabezado Principal */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl md:text-2xl font-black text-slate-800 tracking-wide uppercase m-0">
-            Inventario de Insumo
+            Inventario de Insumos
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
             Consulta general de existencias, lotes y estados de caducidad
           </p>
         </div>
 
-        <Button
-          onClick={() => {}}
-          className="shrink-0 self-start sm:self-auto gap-2"
-        >
-          <Plus className="w-4 h-4" />
-          <span>+ Añadir medicamento</span>
-        </Button>
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Indicador de conectividad y sincronización */}
+          {isSyncing ? (
+            <Badge
+              variant="outline"
+              className="border-blue-200 bg-blue-50 text-blue-700 gap-1.5 py-1 text-xs"
+            >
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              <span>Sincronizando...</span>
+            </Badge>
+          ) : isOnline ? (
+            <Badge
+              variant="outline"
+              className="border-emerald-200 bg-emerald-50 text-emerald-700 gap-1.5 py-1 text-xs"
+            >
+              <Wifi className="w-3.5 h-3.5" />
+              <span>Conectado (Supabase)</span>
+            </Badge>
+          ) : (
+            <Badge
+              variant="outline"
+              className="border-amber-200 bg-amber-50 text-amber-700 gap-1.5 py-1 text-xs"
+            >
+              <WifiOff className="w-3.5 h-3.5" />
+              <span>Modo Offline (Dexie)</span>
+            </Badge>
+          )}
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSync}
+            disabled={!isOnline || isSyncing}
+            className="gap-1.5 h-9 text-xs border-slate-200 hover:bg-slate-50 text-slate-700 font-medium cursor-pointer"
+            title="Sincronizar inventario con Supabase"
+          >
+            <RefreshCw
+              className={`w-3.5 h-3.5 ${isSyncing ? "animate-spin text-blue-600" : ""}`}
+            />
+            <span>{isSyncing ? "Sincronizando..." : "Sincronizar"}</span>
+          </Button>
+
+          <Button
+            onClick={() => navigate(ROUTES.SUPPLY_ENTRY)}
+            className="shrink-0 gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold h-9"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Añadir insumos</span>
+          </Button>
+        </div>
       </div>
 
-      {/* Barra de Filtros y Búsqueda según Figma Desktop - 3 */}
+      {/* Barra de Filtros y Búsqueda */}
       <Card className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
         {/* Píldoras de Filtro */}
         <div className="flex items-center gap-2 flex-wrap">
@@ -118,14 +247,14 @@ export const InventoryPage: React.FC = () => {
             variant={filterMode === "caducan" ? "default" : "secondary"}
             onClick={() => setFilterMode("caducan")}
           >
-            Caducan
+            Caducan (&lt;30 días)
           </Button>
           <Button
             size="sm"
             variant={filterMode === "diez_dias" ? "default" : "secondary"}
             onClick={() => setFilterMode("diez_dias")}
           >
-            &lt;10 días
+            Urgentes (&lt;10 días)
           </Button>
         </div>
 
@@ -135,35 +264,35 @@ export const InventoryPage: React.FC = () => {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Buscar medicamento..."
+            placeholder="Buscar por medicamento, clave o lote..."
             className="pr-9 h-9 text-xs"
           />
           <Search className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
         </div>
       </Card>
 
-      {/* Tabla de Medicamentos con componentes shadcn/ui */}
-      {isLoading ? (
+      {/* Tabla de Medicamentos */}
+      {!inventoryItems ? (
         <Card className="p-12 text-center text-slate-500 text-sm">
           Cargando inventario local...
         </Card>
       ) : filteredMedicines.length === 0 ? (
         <Card className="p-12 text-center">
           <p className="text-sm font-semibold text-slate-700 mb-1">
-            No se encontraron medicamentos
+            No se encontraron insumos en el inventario
           </p>
           <p className="text-xs text-slate-400 mb-4">
             {searchQuery
               ? "Intenta con otro término de búsqueda o limpia los filtros."
-              : "Agrega medicamentos para visualizarlos en el catálogo."}
+              : "Registra entradas de insumos médicos para visualizarlos en este listado."}
           </p>
           <Button
             variant="outline"
-            onClick={() => {}}
+            onClick={() => navigate(ROUTES.SUPPLY_ENTRY)}
             className="gap-2 text-blue-600 border-blue-200 hover:bg-blue-50"
           >
             <Plus className="w-4 h-4" />
-            <span>Crear medicamento</span>
+            <span>Ingresar insumos al inventario</span>
           </Button>
         </Card>
       ) : (
@@ -181,36 +310,40 @@ export const InventoryPage: React.FC = () => {
             </TableHeader>
             <TableBody>
               {filteredMedicines.map((m) => {
-                const criticalExpiry = isExpiringSoon(m.expirationDate, 15);
+                const criticalExpiry = isExpiringSoon(
+                  m.fecha_caducidad,
+                  15,
+                  currentTimestamp,
+                );
                 return (
                   <TableRow key={m.id}>
                     <TableCell className="font-mono font-medium text-slate-700">
-                      {m.code || "00000"}
+                      {m.clave_ssa || "00000"}
                     </TableCell>
                     <TableCell className="font-semibold text-slate-800">
-                      <div>{m.name}</div>
+                      <div>{m.medicamento}</div>
                       <span className="text-[10px] text-slate-400 font-normal">
-                        {m.dosageForm || m.category}
+                        {m.presentacion}
                       </span>
                     </TableCell>
-                    <TableCell className="font-mono text-slate-600">
-                      {m.batchNumber || "00000"}
+                    <TableCell className="font-mono text-slate-600 font-semibold">
+                      {m.lote}
                     </TableCell>
                     <TableCell>
                       {criticalExpiry ? (
                         <Badge variant="destructive">
-                          {m.expirationDate || "N/A"}
+                          {m.fecha_caducidad || "N/A"}
                         </Badge>
                       ) : (
                         <span className="text-slate-700 font-medium">
-                          {m.expirationDate || "N/A"}
+                          {m.fecha_caducidad || "N/A"}
                         </span>
                       )}
                     </TableCell>
                     <TableCell className="font-bold text-slate-800">
                       <span className="inline-flex items-center gap-1.5">
-                        {m.stock}
-                        {m.stock <= m.minStock && (
+                        {m.stock} piezas
+                        {m.stock <= 5 && (
                           <span title="Stock bajo">
                             <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
                           </span>

@@ -1,74 +1,64 @@
-import React, { useState } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
-import { LogIn, Key, Mail, AlertCircle, UserPlus, CheckCircle2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { useAuth } from '../../context/AuthContext'
-import { ROUTES } from '../../router/routes'
+import React, { useState } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import {
+  LogIn,
+  Key,
+  Mail,
+  AlertCircle,
+  CheckCircle2,
+  Eye,
+  EyeOff,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "../../context/AuthContext";
+import { ROUTES } from "../../router/routes";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group";
+import { Field, FieldLabel } from "@/components/ui/field";
 
 export const LoginPage: React.FC = () => {
-  const [isRegisterMode, setIsRegisterMode] = useState(false)
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [fullName, setFullName] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [successMessage, setSuccessMessage] = useState<string | null>(null)
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
 
-  const { login, register } = useAuth()
-  const navigate = useNavigate()
-  const location = useLocation()
+  const { login } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   // Ruta a la que intentaba acceder antes de ser redirigido
   const destination =
-    (location.state as { from?: { pathname: string } })?.from?.pathname || ROUTES.MASTER_CATALOG
+    (location.state as { from?: { pathname: string } })?.from?.pathname ||
+    ROUTES.MASTER_CATALOG;
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError(null)
-    setSuccessMessage(null)
-    setIsSubmitting(true)
+    e.preventDefault();
+    setError(null);
+    setSuccessMessage(null);
+    setIsSubmitting(true);
 
-    if (isRegisterMode) {
-      const result = await register(email, password, fullName)
-      setIsSubmitting(false)
+    const result = await login(email, password);
+    setIsSubmitting(false);
 
-      if (result.success) {
-        if (result.needsEmailConfirmation) {
-          setSuccessMessage(
-            'Cuenta creada con éxito. Por favor, revisa tu correo electrónico para confirmar tu cuenta antes de iniciar sesión.'
-          )
-          setIsRegisterMode(false)
-        } else {
-          // Sesión activa inmediata
-          navigate(destination, { replace: true })
-        }
-      } else {
-        setError(result.error || 'No se pudo crear la cuenta en Supabase')
-      }
+    if (result.success) {
+      navigate(destination, { replace: true });
     } else {
-      const result = await login(email, password)
-      setIsSubmitting(false)
-
-      if (result.success) {
-        navigate(destination, { replace: true })
-      } else {
-        setError(result.error || 'Credenciales incorrectas')
-      }
+      setError(result.error || "Credenciales incorrectas");
     }
-  }
+  };
 
   return (
     <div>
       <div className="mb-6 text-center">
         <h2 className="text-xl font-bold text-slate-800 mb-1">
-          {isRegisterMode ? 'Crear Cuenta' : 'Iniciar Sesión'}
+          Iniciar Sesión
         </h2>
-        <p className="text-xs text-slate-500">
-          {isRegisterMode
-            ? 'Regístrate directamente en Supabase para acceder al sistema'
-            : 'Ingresa con tus credenciales de Supabase'}
-        </p>
+        <p className="text-xs text-slate-500">Ingresa con tus credenciales</p>
       </div>
 
       {error && (
@@ -86,64 +76,66 @@ export const LoginPage: React.FC = () => {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        {isRegisterMode && (
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-              Nombre Completo
-            </label>
-            <Input
-              type="text"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              placeholder="Juan Pérez"
-              required
-            />
-          </div>
-        )}
-
         <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-            Correo Electrónico
-          </label>
-          <div className="relative">
-            <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <Input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="pl-9"
-              placeholder="usuario@ejemplo.com"
-            />
-          </div>
+          <Field>
+            <FieldLabel htmlFor="input-group-email">
+              Correo Electrónico
+            </FieldLabel>
+            <InputGroup>
+              <InputGroupInput
+                id="input-group-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="pl-9"
+                placeholder="usuario@ejemplo.com"
+              />
+              <InputGroupAddon>
+                <Mail />
+              </InputGroupAddon>
+            </InputGroup>
+          </Field>
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-            Contraseña
-          </label>
-          <div className="relative">
-            <Key className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <Input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={6}
-              className="pl-9"
-              placeholder="Mínimo 6 caracteres"
-            />
-          </div>
+          <Field>
+            <FieldLabel htmlFor="input-group-password">Contraseña</FieldLabel>
+            <InputGroup>
+              <InputGroupInput
+                id="input-group-password"
+                type={isVisible ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={6}
+                className="pl-9"
+                placeholder="Ingresa tu contraseña"
+              />
+              <InputGroupAddon>
+                <Key />
+              </InputGroupAddon>
+              <InputGroupAddon align="inline-end">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsVisible(!isVisible)}
+                >
+                  {isVisible ? <EyeOff /> : <Eye />}
+                </Button>
+              </InputGroupAddon>
+            </InputGroup>
+          </Field>
         </div>
 
-        <Button type="submit" disabled={isSubmitting} className="w-full mt-2 h-11">
+        <Button
+          type="submit"
+          disabled={isSubmitting}
+          className="w-full mt-2 h-11"
+        >
           {isSubmitting ? (
-            <span>Conectando con Supabase...</span>
-          ) : isRegisterMode ? (
-            <>
-              <UserPlus className="w-4 h-4 mr-2" />
-              <span>Registrar Usuario</span>
-            </>
+            <span>Conectando...</span>
           ) : (
             <>
               <LogIn className="w-4 h-4 mr-2" />
@@ -152,22 +144,6 @@ export const LoginPage: React.FC = () => {
           )}
         </Button>
       </form>
-
-      <div className="mt-6 pt-4 border-t border-slate-200/80 text-center">
-        <button
-          type="button"
-          onClick={() => {
-            setIsRegisterMode(!isRegisterMode)
-            setError(null)
-            setSuccessMessage(null)
-          }}
-          className="text-xs text-blue-600 hover:text-blue-700 font-semibold cursor-pointer transition-colors"
-        >
-          {isRegisterMode
-            ? '¿Ya tienes cuenta? Inicia sesión aquí'
-            : '¿No tienes cuenta en Supabase? Regístrate aquí'}
-        </button>
-      </div>
     </div>
-  )
-}
+  );
+};

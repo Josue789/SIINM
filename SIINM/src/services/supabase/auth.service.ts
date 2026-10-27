@@ -1,7 +1,75 @@
 import { supabase } from './client'
-import type { User, AuthSession } from '../../types/auth.types'
+import type { User, AuthSession, PerfilUsuario, UserRole } from '../../types/auth.types'
 
 export const authService = {
+  /**
+   * Obtiene el perfil de un usuario desde la tabla Perfil_usuarios.
+   */
+  async getUserProfile(userId: string): Promise<PerfilUsuario | null> {
+    try {
+      const { data, error } = await supabase
+        .from('Perfil_usuarios')
+        .select('id, nombre, rol, email, clinica_id, created_at, Clinicas(id, nombre)')
+        .eq('id', userId)
+        .maybeSingle()
+
+      if (error) {
+        console.warn('[authService] Error al obtener perfil desde Perfil_usuarios:', error.message)
+        return null
+      }
+
+      if (!data) return null
+
+      const item = data as unknown as {
+        id: string
+        email?: string
+        nombre?: string
+        rol?: UserRole
+        clinica_id?: number | null
+        created_at?: string
+        Clinicas?: {
+          id: number
+          nombre: string
+        }
+      }
+
+      return {
+        id: item.id,
+        email: item.email || '',
+        nombre: item.nombre || '',
+        rol: (item.rol as UserRole) || 'Personal',
+        clinica_id: item.clinica_id,
+        created_at: item.created_at,
+        clinica: item.Clinicas
+          ? {
+              id: item.Clinicas.id,
+              nombre: item.Clinicas.nombre,
+            }
+          : undefined,
+      }
+    } catch (err) {
+      console.warn('[authService] Error inesperado al obtener perfil:', err)
+      return null
+    }
+  },
+
+  /**
+   * Construye un objeto User unificando los datos de Supabase Auth con los de Perfil_usuarios.
+   */
+  buildUser(
+    sbUser: { id: string; email?: string; user_metadata?: Record<string, unknown> },
+    profile?: Partial<PerfilUsuario> | null
+  ): User {
+    return {
+      id: sbUser.id,
+      email: profile?.email || sbUser.email || '',
+      fullName: profile?.nombre || (sbUser.user_metadata?.full_name as string) || sbUser.email?.split('@')[0],
+      role: (profile?.rol as UserRole) || (sbUser.user_metadata?.role as UserRole) || 'Personal',
+      clinicaId: profile?.clinica_id ?? null,
+      clinicaNombre: profile?.clinica?.nombre,
+    }
+  },
+
   /**
    * Obtiene la sesión real activa persistida en Supabase.
    */
@@ -11,12 +79,8 @@ export const authService = {
       if (error || !data.session) return null
 
       const sbUser = data.session.user
-      const user: User = {
-        id: sbUser.id,
-        email: sbUser.email || '',
-        fullName: sbUser.user_metadata?.full_name || sbUser.email?.split('@')[0],
-        role: sbUser.user_metadata?.role || 'pharmacist',
-      }
+      const profile = await this.getUserProfile(sbUser.id)
+      const user = this.buildUser(sbUser, profile)
 
       return {
         user,
@@ -50,12 +114,8 @@ export const authService = {
       }
 
       const sbUser = data.user
-      const user: User = {
-        id: sbUser.id,
-        email: sbUser.email || '',
-        fullName: sbUser.user_metadata?.full_name || sbUser.email?.split('@')[0],
-        role: sbUser.user_metadata?.role || 'pharmacist',
-      }
+      const profile = await this.getUserProfile(sbUser.id)
+      const user = this.buildUser(sbUser, profile)
 
       const session: AuthSession = {
         user,
@@ -88,7 +148,7 @@ export const authService = {
         options: {
           data: {
             full_name: fullName?.trim() || email.split('@')[0],
-            role: 'pharmacist',
+            role: 'Personal',
           },
         },
       })
@@ -102,12 +162,8 @@ export const authService = {
       }
 
       const sbUser = data.user
-      const user: User = {
-        id: sbUser.id,
-        email: sbUser.email || '',
-        fullName: sbUser.user_metadata?.full_name || sbUser.email?.split('@')[0],
-        role: sbUser.user_metadata?.role || 'pharmacist',
-      }
+      const profile = await this.getUserProfile(sbUser.id)
+      const user = this.buildUser(sbUser, profile)
 
       const session: AuthSession | null = data.session
         ? {

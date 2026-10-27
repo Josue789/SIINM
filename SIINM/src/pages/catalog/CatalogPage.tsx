@@ -52,6 +52,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
 } from "@/components/ui/alert-dialog";
+import { useAuth } from "@/context/AuthContext";
 
 export const CatalogPage: React.FC = () => {
   const { isOnline, isSyncing, triggerSync } = useNetwork();
@@ -70,6 +71,8 @@ export const CatalogPage: React.FC = () => {
   const [itemToDelete, setItemToDelete] = useState<CatalogoMedicamento | null>(
     null,
   );
+  const { user: currentUser } = useAuth();
+  const isAdmin = currentUser?.role === "admin";
 
   // Consulta reactiva a Dexie en tiempo real. Se actualiza sola cuando llega un evento
   // de Supabase Realtime o una mutación local. No requiere polling ni bucles de conexión.
@@ -160,9 +163,10 @@ export const CatalogPage: React.FC = () => {
       setNewQuantity("1");
       setNewCode("");
       setIsDialogOpen(false);
-    } catch (error) {
-      if (error.message.includes("duplicado")) toast.error(error.message);
-      else toast.error("Error al añadir medicamento");
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Error al añadir medicamento";
+      if (msg.includes("duplicado")) toast.error(msg);
+      else toast.error(msg);
     }
   };
 
@@ -220,7 +224,7 @@ export const CatalogPage: React.FC = () => {
     setNewSsa(item.clave_ssa);
     setNewMedicine(item.medicamento);
     setNewPresentation(item.presentacion);
-    setNewQuantity(item.cantidadPorPieza.toString());
+    setNewQuantity((item.cantidadPorPieza || 1).toString());
     setNewCode(item.codigo_barras);
   };
 
@@ -278,92 +282,96 @@ export const CatalogPage: React.FC = () => {
             />
             <span>Sincronizar</span>
           </Button>
-          {/* Dialogo para agregar o editar un medicamento */}
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="shrink-0 self-start sm:self-auto gap-2">
-                <Plus className="w-4 h-4" />
-                <span>Añadir medicamento</span>
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <form onSubmit={onSubmit} className="space-y-4">
-                <DialogHeader>
-                  <DialogTitle>
-                    {isAddingMedicine
-                      ? "Añadir Nuevo Medicamento"
-                      : "Editar Medicamento"}
-                  </DialogTitle>
-                  <DialogDescription>
-                    Ingresa los detalles técnicos del medicamento para darlo de
-                    alta en el catálogo maestro.
-                  </DialogDescription>
-                </DialogHeader>
-
-                <div className="space-y-3 py-2">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                      Clave SSA
-                    </label>
-                    <Input
-                      placeholder="Ej. 010.000.0410.00"
-                      value={newSsa}
-                      onChange={(e) => setNewSsa(e.target.value)}
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                      Codigo de barras
-                    </label>
-                    <Input
-                      placeholder="Ej. 7501012345678"
-                      value={newCode}
-                      onChange={(e) => setNewCode(e.target.value)}
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                      Nombre del Medicamento
-                    </label>
-                    <Input
-                      placeholder="Ej. Paracetamol 500mg"
-                      value={newMedicine}
-                      onChange={(e) => setNewMedicine(e.target.value)}
-                      required
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                        Presentación
-                      </label>
-                      <Input
-                        placeholder="Ej. Caja c/20 tabletas"
-                        value={newPresentation}
-                        onChange={(e) => setNewPresentation(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <DialogFooter>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setIsDialogOpen(false)}
-                  >
-                    Cancelar
+          {
+            /* Dialogo para agregar o editar un medicamento */
+            isAdmin && (
+              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button className="shrink-0 self-start sm:self-auto gap-2">
+                    <Plus className="w-4 h-4" />
+                    <span>Añadir medicamento</span>
                   </Button>
-                  <Button type="submit">Guardar Medicamento</Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
+                </DialogTrigger>
+                <DialogContent>
+                  <form onSubmit={onSubmit} className="space-y-4">
+                    <DialogHeader>
+                      <DialogTitle>
+                        {isAddingMedicine
+                          ? "Añadir Nuevo Medicamento"
+                          : "Editar Medicamento"}
+                      </DialogTitle>
+                      <DialogDescription>
+                        Ingresa los detalles técnicos del medicamento para darlo
+                        de alta en el catálogo maestro.
+                      </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-3 py-2">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                          Clave SSA
+                        </label>
+                        <Input
+                          placeholder="Ej. 010.000.0410.00"
+                          value={newSsa}
+                          onChange={(e) => setNewSsa(e.target.value)}
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                          Codigo de barras
+                        </label>
+                        <Input
+                          placeholder="Ej. 7501012345678"
+                          value={newCode}
+                          onChange={(e) => setNewCode(e.target.value)}
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                          Nombre del Medicamento
+                        </label>
+                        <Input
+                          placeholder="Ej. Paracetamol 500mg"
+                          value={newMedicine}
+                          onChange={(e) => setNewMedicine(e.target.value)}
+                          required
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                            Presentación
+                          </label>
+                          <Input
+                            placeholder="Ej. Caja c/20 tabletas"
+                            value={newPresentation}
+                            onChange={(e) => setNewPresentation(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <DialogFooter>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setIsDialogOpen(false)}
+                      >
+                        Cancelar
+                      </Button>
+                      <Button type="submit">Guardar Medicamento</Button>
+                    </DialogFooter>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            )
+          }
 
           {/* Dialogo para eliminar */}
           <AlertDialog open={isDialogDelete} onOpenChange={setIsDialogDelete}>
@@ -468,7 +476,9 @@ export const CatalogPage: React.FC = () => {
               <TableHead className="text-gray-800">Presentación</TableHead>
 
               <TableHead className="text-gray-800">Estatus</TableHead>
-              <TableHead className="text-right">Operaciones</TableHead>
+              {isAdmin && (
+                <TableHead className="text-right">Operaciones</TableHead>
+              )}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -518,68 +528,70 @@ export const CatalogPage: React.FC = () => {
                         {estatusText}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                          >
-                            <MoreVertical className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent className="dark:bg-white dark:border-gray-200">
-                          <DropdownMenuGroup>
+                    {isAdmin && (
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                            >
+                              <MoreVertical className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent className="dark:bg-white dark:border-gray-200">
+                            <DropdownMenuGroup>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  openDialogToEdit(item);
+                                }}
+                                className="cursor-pointer dark:text-gray-800 hover:bg-gray-100"
+                              >
+                                <div className="flex items-center">
+                                  <PencilIcon className="w-4 h-4 mr-2" />
+                                  <p>Editar</p>
+                                </div>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="cursor-pointer dark:text-gray-800 hover:bg-gray-100"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setItemToDelete(item);
+                                  setIsDialogDelete(true);
+                                }}
+                              >
+                                <div className="flex items-center text-red-500">
+                                  <Trash2Icon className="w-4 h-4 mr-2" />
+                                  <p>Eliminar</p>
+                                </div>
+                              </DropdownMenuItem>
+                            </DropdownMenuGroup>
                             <DropdownMenuItem
+                              className="cursor-pointer dark:text-gray-800 hover:bg-gray-100 border-t-gray-100 border-t-2"
                               onClick={() => {
-                                openDialogToEdit(item);
-                              }}
-                              className="cursor-pointer dark:text-gray-800 hover:bg-gray-100"
-                            >
-                              <div className="flex items-center">
-                                <PencilIcon className="w-4 h-4 mr-2" />
-                                <p>Editar</p>
-                              </div>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="cursor-pointer dark:text-gray-800 hover:bg-gray-100"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setItemToDelete(item);
-                                setIsDialogDelete(true);
+                                const newStatus = isActivo
+                                  ? "Inactivo"
+                                  : "Activo";
+                                updateMedicineStatus(item.id, newStatus);
                               }}
                             >
-                              <div className="flex items-center text-red-500">
-                                <Trash2Icon className="w-4 h-4 mr-2" />
-                                <p>Eliminar</p>
-                              </div>
+                              {isActivo ? (
+                                <div className="flex items-center text-red-500">
+                                  <EyeOff className="w-4 h-4 mr-2" />
+                                  <p>Desactivar</p>
+                                </div>
+                              ) : (
+                                <div className="flex items-center text-green-500">
+                                  <EyeIcon className="w-4 h-4 mr-2" />
+                                  <p>Activar</p>
+                                </div>
+                              )}
                             </DropdownMenuItem>
-                          </DropdownMenuGroup>
-                          <DropdownMenuItem
-                            className="cursor-pointer dark:text-gray-800 hover:bg-gray-100 border-t-gray-100 border-t-2"
-                            onClick={() => {
-                              const newStatus = isActivo
-                                ? "Inactivo"
-                                : "Activo";
-                              updateMedicineStatus(item.id, newStatus);
-                            }}
-                          >
-                            {isActivo ? (
-                              <div className="flex items-center text-red-500">
-                                <EyeOff className="w-4 h-4 mr-2" />
-                                <p>Desactivar</p>
-                              </div>
-                            ) : (
-                              <div className="flex items-center text-green-500">
-                                <EyeIcon className="w-4 h-4 mr-2" />
-                                <p>Activar</p>
-                              </div>
-                            )}
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    )}
                   </TableRow>
                 );
               })

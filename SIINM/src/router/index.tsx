@@ -1,23 +1,24 @@
-import { createBrowserRouter, Navigate } from 'react-router-dom'
-import { RootLayout } from '../layouts/RootLayout'
-import { MainLayout } from '../layouts/MainLayout'
-import { AuthLayout } from '../layouts/AuthLayout'
-import { ProtectedRoute } from './guards/ProtectedRoute'
-import { PublicRoute } from './guards/PublicRoute'
-import { LoginPage } from '../pages/auth/LoginPage'
-import { DashboardPage } from '../pages/dashboard/DashboardPage'
-import { InventoryPage } from '../pages/inventory/InventoryPage'
-import { SyncPage } from '../pages/sync/SyncPage'
-import { PrescriptionsPage } from '../pages/prescriptions/PrescriptionsPage'
-import { SupplyEntryPage } from '../pages/supply-entry/SupplyEntryPage'
-import { ExportPage } from '../pages/export/ExportPage'
-import { SettingsPage } from '../pages/settings/SettingsPage'
-import { ClinicsPage } from '../pages/settings/clinicsPage'
-import { UsersPage } from '../pages/settings/usersPage'
-import { CatalogPage } from '../pages/catalog/CatalogPage'
-import { SupervisionPage } from '../pages/supervision/SupervisionPage'
-import { NotFoundPage } from '../pages/not-found/NotFoundPage'
-import { ROUTES } from './routes'
+import { createBrowserRouter, Navigate } from "react-router-dom";
+import { RootLayout } from "../layouts/RootLayout";
+import { MainLayout } from "../layouts/MainLayout";
+import { AuthLayout } from "../layouts/AuthLayout";
+import { ProtectedRoute } from "./guards/ProtectedRoute";
+import { PublicRoute } from "./guards/PublicRoute";
+import { LoginPage } from "../pages/auth/LoginPage";
+import { DashboardPage } from "../pages/dashboard/DashboardPage";
+import { InventoryPage } from "../pages/inventory/InventoryPage";
+import { SyncPage } from "../pages/sync/SyncPage";
+import { PrescriptionsPage } from "../pages/prescriptions/PrescriptionsPage";
+import { SupplyEntryPage } from "../pages/supply-entry/SupplyEntryPage";
+import { ExportPage } from "../pages/export/ExportPage";
+import { SettingsPage } from "../pages/settings/SettingsPage";
+import { ClinicsPage } from "../pages/settings/clinicsPage";
+import { UsersPage } from "../pages/settings/usersPage";
+import { CatalogPage } from "../pages/catalog/CatalogPage";
+import { SupervisionPage } from "../pages/supervision/SupervisionPage";
+import { NotFoundPage } from "../pages/not-found/NotFoundPage";
+import { ROUTES } from "./routes";
+import { AdminRoute } from "./guards/AdminRoute";
 
 export const router = createBrowserRouter([
   {
@@ -33,6 +34,37 @@ export const router = createBrowserRouter([
               {
                 path: ROUTES.LOGIN,
                 element: <LoginPage />,
+              },
+            ],
+          },
+        ],
+      },
+
+      {
+        element: <AdminRoute />,
+        children: [
+          {
+            element: <MainLayout />,
+            children: [
+              {
+                path: ROUTES.ROOT,
+                element: <Navigate to={ROUTES.SUPPLY_ENTRY} replace />,
+              },
+              {
+                path: ROUTES.SETTINGS,
+                element: <SettingsPage />,
+              },
+              {
+                path: ROUTES.CLINICS_MANAGE,
+                element: <ClinicsPage />,
+              },
+              {
+                path: ROUTES.USERS_MANAGE,
+                element: <UsersPage />,
+              },
+              {
+                path: ROUTES.CLINIC_SUPERVISION,
+                element: <SupervisionPage />,
               },
             ],
           },
@@ -108,4 +140,4 @@ export const router = createBrowserRouter([
       },
     ],
   },
-])
+]);

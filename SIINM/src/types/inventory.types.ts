@@ -15,13 +15,17 @@ export interface CatalogoMedicamento {
 }
 
 export interface InventarioItem {
-  id: number | string
-  update_date: string
+  id?: number | string
+  update_date?: string
   id_clinica: number
-  id_medicamento: number
+  id_medicamento: number | string
   lote: string
   stock: number
   fecha_caducidad: string
+  medicamento?: string
+  clave_ssa?: string
+  codigo_barras?: string
+  presentacion?: string
 }
 
 export interface Clinica {

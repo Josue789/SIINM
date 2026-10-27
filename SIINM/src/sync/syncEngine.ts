@@ -4,6 +4,13 @@ import { networkWatcher } from './networkWatcher'
 import { db } from '../db'
 import type { SyncQueueItem } from '../types/sync.types'
 import type { RealtimeChannel } from '@supabase/supabase-js'
+import type { Medicine, InventarioItem } from '../types/inventory.types'
+
+interface RealtimePostgresPayload {
+  eventType: string
+  new: Record<string, unknown>
+  old: Record<string, unknown>
+}
 
 class SyncEngine {
   private isSyncing = false
@@ -32,7 +39,7 @@ class SyncEngine {
 
     try {
       this.realtimeChannel = supabase
-        .channel('catalogo_medicamentos_realtime')
+        .channel('app_realtime_sync')
         .on(
           'postgres_changes',
           {
@@ -40,14 +47,26 @@ class SyncEngine {
             schema: 'public',
             table: 'catalogo_medicamentos',
           },
-          (payload: any) => {
-            console.log('[Supabase Realtime] Evento recibido:', payload.eventType, payload)
+          (payload: RealtimePostgresPayload) => {
+            console.log('[Supabase Realtime] catalogo_medicamentos:', payload.eventType, payload)
             this.handleRealtimeEvent(payload).catch(console.error)
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'Inventario',
+          },
+          (payload: RealtimePostgresPayload) => {
+            console.log('[Supabase Realtime] Inventario:', payload.eventType, payload)
+            this.handleInventarioRealtimeEvent(payload).catch(console.error)
           }
         )
         .subscribe((status) => {
           if (status === 'SUBSCRIBED') {
-            console.log('[Supabase Realtime] Conectado y escuchando cambios en catalogo_medicamentos')
+            console.log('[Supabase Realtime] Conectado y escuchando cambios en catalogo e inventario')
           }
         })
     } catch (err) {
@@ -69,11 +88,7 @@ class SyncEngine {
   /**
    * Procesa un cambio recibido vía WebSocket desde Supabase y actualiza Dexie en tiempo real.
    */
-  private async handleRealtimeEvent(payload: {
-    eventType: string
-    new: Record<string, any>
-    old: Record<string, any>
-  }) {
+  private async handleRealtimeEvent(payload: RealtimePostgresPayload) {
     try {
       const { eventType, new: newRecord, old: oldRecord } = payload
 
@@ -83,21 +98,21 @@ class SyncEngine {
         const formatted = {
           ...newRecord,
           id: String(newRecord.id),
-          clave_ssa: newRecord.clave_ssa || '',
-          ssa: newRecord.clave_ssa || '',
-          medicamento: newRecord.medicamento || '',
-          name: newRecord.medicamento || '',
-          presentacion: newRecord.presentacion || 'Pieza',
-          codigo_barras: newRecord.codigo_barras || '',
+          clave_ssa: (newRecord.clave_ssa as string) || '',
+          ssa: (newRecord.clave_ssa as string) || '',
+          medicamento: (newRecord.medicamento as string) || '',
+          name: (newRecord.medicamento as string) || '',
+          presentacion: (newRecord.presentacion as string) || 'Pieza',
+          codigo_barras: (newRecord.codigo_barras as string) || '',
           activo: newRecord.activo !== undefined ? Boolean(newRecord.activo) : true,
           estatus: newRecord.activo !== false ? 'Activo' : 'Inactivo',
-          cantidadPorPieza: newRecord.cantidadPorPieza || 1,
+          cantidadPorPieza: (newRecord.cantidadPorPieza as number) || 1,
         }
 
         if (db.catalogo_medicamentos) {
           await db.catalogo_medicamentos.put(formatted)
         }
-        await db.medicines.put(formatted as any)
+        await db.medicines.put(formatted as unknown as Medicine)
       } else if (eventType === 'DELETE') {
         const idToDelete = String(oldRecord?.id)
         if (idToDelete) {
@@ -109,6 +124,59 @@ class SyncEngine {
       }
     } catch (err) {
       console.error('[Supabase Realtime] Error aplicando evento en Dexie:', err)
+    }
+  }
+
+  /**
+   * Procesa un cambio recibido vía WebSocket para la tabla Inventario.
+   */
+  private async handleInventarioRealtimeEvent(payload: RealtimePostgresPayload) {
+    try {
+      const { eventType, new: newRecord, old: oldRecord } = payload
+
+      if (eventType === 'INSERT' || eventType === 'UPDATE') {
+        if (!newRecord || !newRecord.id) return
+
+        let medicamento = ''
+        let clave_ssa = ''
+        let presentacion = 'Pieza'
+        let codigo_barras = ''
+
+        if (newRecord.id_medicamento && db.catalogo_medicamentos) {
+          const med = await db.catalogo_medicamentos.get(String(newRecord.id_medicamento))
+          if (med) {
+            medicamento = med.medicamento || ''
+            clave_ssa = med.clave_ssa || ''
+            presentacion = med.presentacion || 'Pieza'
+            codigo_barras = med.codigo_barras || ''
+          }
+        }
+
+        const formatted: InventarioItem = {
+          id: newRecord.id as number | string,
+          id_clinica: Number(newRecord.id_clinica),
+          id_medicamento: (newRecord.id_medicamento as number | string) || '',
+          lote: (newRecord.lote as string) || '00000',
+          stock: Number(newRecord.stock) || 0,
+          fecha_caducidad: (newRecord.fecha_caducidad as string) || 'N/A',
+          update_date: (newRecord.update_date as string) || new Date().toISOString(),
+          medicamento,
+          clave_ssa,
+          presentacion,
+          codigo_barras,
+        }
+
+        if (db.inventario) {
+          await db.inventario.put(formatted)
+        }
+      } else if (eventType === 'DELETE') {
+        const idToDelete = oldRecord?.id as string | number | undefined
+        if (idToDelete && db.inventario) {
+          await db.inventario.delete(idToDelete as unknown as string)
+        }
+      }
+    } catch (err) {
+      console.error('[Supabase Realtime] Error aplicando evento de Inventario en Dexie:', err)
     }
   }
 
@@ -190,7 +258,40 @@ class SyncEngine {
             cantidadPorPieza: remote.cantidadPorPieza || 1,
           }
           await db.catalogo_medicamentos?.put(formatted)
-          await db.medicines?.put(formatted as any)
+          await db.medicines?.put(formatted as unknown as Medicine)
+        } else if (data && data[0] && item.tableName === 'Inventario') {
+          const remote = data[0]
+          if (item.recordId !== String(remote.id)) {
+            await db.inventario?.delete(item.recordId)
+          }
+          let medicamento = ''
+          let clave_ssa = ''
+          let presentacion = 'Pieza'
+          let codigo_barras = ''
+
+          if (remote.id_medicamento && db.catalogo_medicamentos) {
+            const med = await db.catalogo_medicamentos.get(String(remote.id_medicamento))
+            if (med) {
+              medicamento = med.medicamento || ''
+              clave_ssa = med.clave_ssa || ''
+              presentacion = med.presentacion || 'Pieza'
+              codigo_barras = med.codigo_barras || ''
+            }
+          }
+
+          await db.inventario?.put({
+            id: remote.id,
+            id_clinica: Number(remote.id_clinica),
+            id_medicamento: remote.id_medicamento,
+            lote: remote.lote || '00000',
+            stock: Number(remote.stock) || 0,
+            fecha_caducidad: remote.fecha_caducidad || 'N/A',
+            update_date: remote.update_date || new Date().toISOString(),
+            medicamento,
+            clave_ssa,
+            presentacion,
+            codigo_barras,
+          })
         }
       } else if (item.action === 'update') {
         const { error } = await supabase
@@ -222,7 +323,7 @@ class SyncEngine {
 
   private async pullRemoteChanges(): Promise<void> {
     try {
-      // Pull para la tabla 'catalogo_medicamentos' de Supabase
+      // 1. Pull para la tabla 'catalogo_medicamentos' de Supabase
       const { data, error } = await supabase
         .from('catalogo_medicamentos')
         .select('*')
@@ -231,34 +332,65 @@ class SyncEngine {
 
       if (error) {
         console.error('[SyncEngine] Error al descargar catalogo_medicamentos de Supabase:', error.message, error)
-        return
+      } else if (data && data.length > 0) {
+        // Formatear y asegurar tipos en Dexie
+        const formatted = data.map((d: Record<string, unknown>) => ({
+          ...d,
+          id: String(d.id),
+          clave_ssa: (d.clave_ssa as string) || (d.ssa as string) || '',
+          ssa: (d.clave_ssa as string) || (d.ssa as string) || '',
+          medicamento: (d.medicamento as string) || (d.name as string) || '',
+          name: (d.medicamento as string) || (d.name as string) || '',
+          presentacion: (d.presentacion as string) || 'Pieza',
+          codigo_barras: (d.codigo_barras as string) || '',
+          activo: d.activo !== undefined ? Boolean(d.activo) : true,
+          estatus: d.activo !== false ? 'Activo' : 'Inactivo',
+          cantidadPorPieza: (d.cantidadPorPieza as number) || 1,
+        }))
+
+        if (db.catalogo_medicamentos) {
+          await db.catalogo_medicamentos.bulkPut(formatted)
+        }
+        await db.medicines.bulkPut(formatted as unknown as Medicine[])
+        console.log(`[SyncEngine] Sincronizados ${formatted.length} medicamentos desde Supabase a Dexie.`)
       }
 
-      if (!data || data.length === 0) {
-        console.log('[SyncEngine] catalogo_medicamentos en Supabase no tiene registros (o bloqueado por RLS).')
-        return
-      }
+      // 2. Pull para la tabla 'Inventario' de Supabase
+      const { data: invData, error: invError } = await supabase
+        .from('Inventario')
+        .select('*')
+        .order('id', { ascending: true })
+        .limit(1000)
 
-      // Formatear y asegurar tipos en Dexie
-      const formatted = data.map((d: any) => ({
-        ...d,
-        id: String(d.id),
-        clave_ssa: d.clave_ssa || d.ssa || '',
-        ssa: d.clave_ssa || d.ssa || '',
-        medicamento: d.medicamento || d.name || '',
-        name: d.medicamento || d.name || '',
-        presentacion: d.presentacion || 'Pieza',
-        codigo_barras: d.codigo_barras || '',
-        activo: d.activo !== undefined ? Boolean(d.activo) : true,
-        estatus: d.activo !== false ? 'Activo' : 'Inactivo',
-        cantidadPorPieza: d.cantidadPorPieza || 1,
-      }))
+      if (invError) {
+        console.error('[SyncEngine] Error al descargar Inventario de Supabase:', invError.message, invError)
+      } else if (invData && invData.length > 0) {
+        const catalog = (await db.catalogo_medicamentos?.toArray()) || []
+        const catalogMap = new Map(catalog.map((c) => [String(c.id), c]))
 
-      if (db.catalogo_medicamentos) {
-        await db.catalogo_medicamentos.bulkPut(formatted)
+        const formattedInv = invData.map((d: Record<string, unknown>) => {
+          const medId = (d.id_medicamento as string | number) || ''
+          const med = catalogMap.get(String(medId))
+          return {
+            id: d.id as number | string,
+            id_clinica: Number(d.id_clinica),
+            id_medicamento: medId,
+            lote: (d.lote as string) || '00000',
+            stock: Number(d.stock) || 0,
+            fecha_caducidad: (d.fecha_caducidad as string) || 'N/A',
+            update_date: (d.update_date as string) || new Date().toISOString(),
+            medicamento: med?.medicamento || '',
+            clave_ssa: med?.clave_ssa || '',
+            presentacion: med?.presentacion || 'Pieza',
+            codigo_barras: med?.codigo_barras || '',
+          }
+        })
+
+        if (db.inventario) {
+          await db.inventario.bulkPut(formattedInv)
+        }
+        console.log(`[SyncEngine] Sincronizados ${formattedInv.length} registros de Inventario desde Supabase.`)
       }
-      await db.medicines.bulkPut(formatted as any)
-      console.log(`[SyncEngine] Sincronizados ${formatted.length} medicamentos desde Supabase a Dexie.`)
     } catch (err) {
       console.error('[SyncEngine] Error inesperado en pullRemoteChanges:', err)
     }

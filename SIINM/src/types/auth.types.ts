@@ -5,6 +5,8 @@ export interface User {
   email: string
   fullName?: string
   role?: UserRole
+  clinicaId?: number | null
+  clinicaNombre?: string
 }
 
 export interface PerfilUsuario {

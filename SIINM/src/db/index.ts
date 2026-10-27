@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie'
-import type { Medicine, InventoryMovement, CatalogoMedicamento } from '../types/inventory.types'
+import type { Medicine, InventoryMovement, CatalogoMedicamento, InventarioItem } from '../types/inventory.types'
 import type { SyncQueueItem } from '../types/sync.types'
 
 /**
@@ -11,6 +11,7 @@ export class SIINMDatabase extends Dexie {
   medicines!: EntityTable<Medicine, 'id'>
   inventoryMovements!: EntityTable<InventoryMovement, 'id'>
   syncQueue!: EntityTable<SyncQueueItem, 'id'>
+  inventario!: EntityTable<InventarioItem, 'id'>
 
   constructor() {
     super('SIINM_OfflineDB')
@@ -23,6 +24,10 @@ export class SIINMDatabase extends Dexie {
 
     this.version(2).stores({
       catalogo_medicamentos: 'id, codigo_barras, clave_ssa, medicamento, presentacion, activo',
+    })
+
+    this.version(3).stores({
+      inventario: '++id, id_clinica, id_medicamento, lote, stock, fecha_caducidad, update_date',
     })
   }
 }

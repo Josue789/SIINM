@@ -111,7 +111,12 @@ export const PrescriptionsPage: React.FC = () => {
   };
 
   const filteredMedications = medications.filter((item) =>
-    search ? item.name.toLowerCase().includes(search.toLowerCase()) : true,
+    search
+      ? item.name
+          .toString()
+          .toLowerCase()
+          .includes(search.toString().toLowerCase())
+      : true,
   );
 
   return (
