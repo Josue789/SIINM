@@ -105,7 +105,10 @@ export const SupplyEntryPage: React.FC = () => {
   // Consulta reactiva a Dexie del catálogo maestro
   const catalogItems =
     useLiveQuery(
-      () => medicineRepository.getAll(),
+      async () => {
+        const meds = await medicineRepository.getAll();
+        return meds.filter((m) => m.activo === true);
+      },
       [],
       [] as CatalogoMedicamento[],
     ) || [];
@@ -451,7 +454,7 @@ export const SupplyEntryPage: React.FC = () => {
             No hay insumos pendientes de ingresar. Llena el formulario superior.
           </div>
         ) : (
-          <ScrollArea className="space-y-3 max-h-3/4">
+          <ScrollArea className="flex-1 h-[calc(100vh-39rem)]" type="auto">
             {incomingItems.map((item) => (
               <div
                 key={item.id}

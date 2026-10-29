@@ -1,5 +1,6 @@
 import { supabase } from '../services/supabase/client'
 import { syncQueueRepository } from '../db/repositories/syncQueue.repository'
+import { inventarioRepository } from '../db/repositories/inventario.repository'
 import { networkWatcher } from './networkWatcher'
 import { db } from '../db'
 import type { SyncQueueItem } from '../types/sync.types'
@@ -167,12 +168,36 @@ class SyncEngine {
         }
 
         if (db.inventario) {
+          // Si existía un registro temporal local para esta clínica, medicamento y lote, removerlo
+          const loteTrimmed = String(newRecord.lote || '').trim()
+          const localDups = await db.inventario
+            .filter(
+              (inv) =>
+                inv.id_clinica === Number(newRecord.id_clinica) &&
+                String(inv.id_medicamento) === String(newRecord.id_medicamento) &&
+                inv.lote.toLowerCase() === loteTrimmed.toLowerCase() &&
+                inv.id !== newRecord.id
+            )
+            .toArray()
+
+          for (const dup of localDups) {
+            if (dup.id) {
+              await db.inventario.delete(dup.id as unknown as string)
+              if (!isNaN(Number(dup.id))) {
+                await db.inventario.delete(Number(dup.id))
+              }
+            }
+          }
+
           await db.inventario.put(formatted)
         }
       } else if (eventType === 'DELETE') {
         const idToDelete = oldRecord?.id as string | number | undefined
         if (idToDelete && db.inventario) {
           await db.inventario.delete(idToDelete as unknown as string)
+          if (!isNaN(Number(idToDelete))) {
+            await db.inventario.delete(Number(idToDelete))
+          }
         }
       }
     } catch (err) {
@@ -233,65 +258,118 @@ class SyncEngine {
   private async pushItem(item: SyncQueueItem): Promise<boolean> {
     try {
       if (item.action === 'insert') {
-        const { data, error } = await supabase.from(item.tableName).insert(item.payload).select()
-        if (error) {
-          console.error('[SyncEngine] Error en Supabase INSERT:', error.message, error)
-          throw error
-        }
+        if (item.tableName === 'Inventario') {
+          const payload = item.payload as Record<string, unknown>
+          const medIdParsed = !isNaN(Number(payload.id_medicamento))
+            ? Number(payload.id_medicamento)
+            : payload.id_medicamento
+          const loteTrimmed = String(payload.lote || '').trim()
 
-        if (data && data[0] && item.tableName === 'catalogo_medicamentos') {
-          const remote = data[0]
-          if (item.recordId !== String(remote.id)) {
-            await db.catalogo_medicamentos?.delete(item.recordId)
-            await db.medicines?.delete(item.recordId)
-          }
-          const formatted = {
-            ...remote,
-            id: String(remote.id),
-            clave_ssa: remote.clave_ssa || '',
-            ssa: remote.clave_ssa || '',
-            medicamento: remote.medicamento || '',
-            name: remote.medicamento || '',
-            presentacion: remote.presentacion || 'Pieza',
-            activo: Boolean(remote.activo),
-            estatus: remote.activo ? 'Activo' : 'Inactivo',
-            cantidadPorPieza: remote.cantidadPorPieza || 1,
-          }
-          await db.catalogo_medicamentos?.put(formatted)
-          await db.medicines?.put(formatted as unknown as Medicine)
-        } else if (data && data[0] && item.tableName === 'Inventario') {
-          const remote = data[0]
-          if (item.recordId !== String(remote.id)) {
-            await db.inventario?.delete(item.recordId)
-          }
-          let medicamento = ''
-          let clave_ssa = ''
-          let presentacion = 'Pieza'
-          let codigo_barras = ''
+          // Verificar si ya existe en Supabase para acumular stock y evitar error de restricción unique
+          const { data: existingRemote } = await supabase
+            .from('Inventario')
+            .select('id, stock')
+            .eq('id_clinica', Number(payload.id_clinica))
+            .eq('id_medicamento', medIdParsed)
+            .eq('lote', loteTrimmed)
+            .maybeSingle()
 
-          if (remote.id_medicamento && db.catalogo_medicamentos) {
-            const med = await db.catalogo_medicamentos.get(String(remote.id_medicamento))
-            if (med) {
-              medicamento = med.medicamento || ''
-              clave_ssa = med.clave_ssa || ''
-              presentacion = med.presentacion || 'Pieza'
-              codigo_barras = med.codigo_barras || ''
+          let remote: Record<string, unknown> | null = null
+
+          if (existingRemote) {
+            const updatedStock = Number(existingRemote.stock) + (Number(payload.stock) || 0)
+            const updatePayload = {
+              stock: updatedStock,
+              update_date: payload.update_date || new Date().toISOString(),
+              fecha_caducidad: payload.fecha_caducidad,
             }
+            const { data: updatedData, error: updateErr } = await supabase
+              .from('Inventario')
+              .update(updatePayload)
+              .eq('id', existingRemote.id)
+              .select()
+
+            if (updateErr) {
+              console.error('[SyncEngine] Error actualizando stock en Supabase:', updateErr.message, updateErr)
+              throw updateErr
+            }
+            remote = (updatedData && updatedData[0]) || { ...existingRemote, ...updatePayload }
+          } else {
+            const { data, error } = await supabase.from(item.tableName).insert(item.payload).select()
+            if (error) {
+              console.error('[SyncEngine] Error en Supabase INSERT:', error.message, error)
+              throw error
+            }
+            remote = data?.[0] || null
           }
 
-          await db.inventario?.put({
-            id: remote.id,
-            id_clinica: Number(remote.id_clinica),
-            id_medicamento: remote.id_medicamento,
-            lote: remote.lote || '00000',
-            stock: Number(remote.stock) || 0,
-            fecha_caducidad: remote.fecha_caducidad || 'N/A',
-            update_date: remote.update_date || new Date().toISOString(),
-            medicamento,
-            clave_ssa,
-            presentacion,
-            codigo_barras,
-          })
+          if (remote) {
+            if (item.recordId !== String(remote.id)) {
+              await db.inventario?.delete(item.recordId)
+              if (!isNaN(Number(item.recordId))) {
+                await db.inventario?.delete(Number(item.recordId))
+              }
+            }
+
+            let medicamento = ''
+            let clave_ssa = ''
+            let presentacion = 'Pieza'
+            let codigo_barras = ''
+
+            if (remote.id_medicamento && db.catalogo_medicamentos) {
+              const med = await db.catalogo_medicamentos.get(String(remote.id_medicamento))
+              if (med) {
+                medicamento = med.medicamento || ''
+                clave_ssa = med.clave_ssa || ''
+                presentacion = med.presentacion || 'Pieza'
+                codigo_barras = med.codigo_barras || ''
+              }
+            }
+
+            await db.inventario?.put({
+              id: remote.id as number | string,
+              id_clinica: Number(remote.id_clinica),
+              id_medicamento: remote.id_medicamento as number | string,
+              lote: (remote.lote as string) || '00000',
+              stock: Number(remote.stock) || 0,
+              fecha_caducidad: (remote.fecha_caducidad as string) || 'N/A',
+              update_date: (remote.update_date as string) || new Date().toISOString(),
+              medicamento,
+              clave_ssa,
+              presentacion,
+              codigo_barras,
+            })
+
+            await inventarioRepository.deduplicateLocal()
+          }
+        } else {
+          const { data, error } = await supabase.from(item.tableName).insert(item.payload).select()
+          if (error) {
+            console.error('[SyncEngine] Error en Supabase INSERT:', error.message, error)
+            throw error
+          }
+
+          if (data && data[0] && item.tableName === 'catalogo_medicamentos') {
+            const remote = data[0]
+            if (item.recordId !== String(remote.id)) {
+              await db.catalogo_medicamentos?.delete(item.recordId)
+              await db.medicines?.delete(item.recordId)
+            }
+            const formatted = {
+              ...remote,
+              id: String(remote.id),
+              clave_ssa: remote.clave_ssa || '',
+              ssa: remote.clave_ssa || '',
+              medicamento: remote.medicamento || '',
+              name: remote.medicamento || '',
+              presentacion: remote.presentacion || 'Pieza',
+              activo: Boolean(remote.activo),
+              estatus: remote.activo ? 'Activo' : 'Inactivo',
+              cantidadPorPieza: remote.cantidadPorPieza || 1,
+            }
+            await db.catalogo_medicamentos?.put(formatted)
+            await db.medicines?.put(formatted as unknown as Medicine)
+          }
         }
       } else if (item.action === 'update') {
         const { error } = await supabase
@@ -388,6 +466,7 @@ class SyncEngine {
 
         if (db.inventario) {
           await db.inventario.bulkPut(formattedInv)
+          await inventarioRepository.deduplicateLocal()
         }
         console.log(`[SyncEngine] Sincronizados ${formattedInv.length} registros de Inventario desde Supabase.`)
       }

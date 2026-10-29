@@ -1,6 +1,14 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Search, AlertTriangle, Trash2, RefreshCw, Wifi, WifiOff } from "lucide-react";
+import {
+  Plus,
+  Search,
+  AlertTriangle,
+  Trash2,
+  RefreshCw,
+  Wifi,
+  WifiOff,
+} from "lucide-react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/db";
 import { useNetwork } from "@/context/NetworkContext";
@@ -20,6 +28,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toast } from "react-toastify";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 type FilterMode = "todos" | "caducan" | "diez_dias";
 
@@ -61,10 +79,20 @@ const isExpiringSoon = (
 export const InventoryPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { isOnline, isSyncing, triggerSync, refreshPendingCount } = useNetwork();
+  const { isOnline, isSyncing, triggerSync, refreshPendingCount } =
+    useNetwork();
   const [filterMode, setFilterMode] = useState<FilterMode>("todos");
   const [searchQuery, setSearchQuery] = useState("");
   const [currentTimestamp] = useState(() => Date.now());
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [medicineToDelete, setMedicineToDelete] =
+    useState<InventoryItem | null>(null);
+  const [loteToVerify, setLoteToVerify] = useState<string>("");
+
+  // Limpiar cualquier registro duplicado residual en Dexie al montar la página
+  useEffect(() => {
+    inventarioRepository.deduplicateLocal().catch(console.warn);
+  }, []);
 
   // Función para sincronizar con Supabase manualmente
   const handleSync = async () => {
@@ -81,28 +109,64 @@ export const InventoryPage: React.FC = () => {
       await triggerSync(true);
       toast.success("Inventario sincronizado con Supabase");
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Error al sincronizar con Supabase";
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Error al sincronizar con Supabase";
       toast.error(msg);
     }
   };
 
-  // Consulta reactiva a Dexie: une inventario local y medicines
+  // Consulta reactiva a Dexie: une inventario local y medicines, eliminando duplicados
   const inventoryItems = useLiveQuery(
     async (): Promise<DisplayInventoryItem[]> => {
       try {
         const localInventario = await db.inventario.toArray();
         if (localInventario && localInventario.length > 0) {
-          return localInventario.map((item) => ({
-            id:
-              item.id ||
-              `${item.id_clinica}-${item.id_medicamento}-${item.lote}`,
-            clave_ssa: item.clave_ssa || "",
-            medicamento: item.medicamento || "Medicamento sin nombre",
-            presentacion: item.presentacion || "Pieza",
-            lote: item.lote || "00000",
-            fecha_caducidad: item.fecha_caducidad || "N/A",
-            stock: Number(item.stock) || 0,
-          }));
+          const dedupMap = new Map<string, DisplayInventoryItem>();
+
+          for (const item of localInventario) {
+            // Filtrar por clínica si el usuario tiene una clínica asignada
+            if (
+              user?.clinicaId &&
+              Number(item.id_clinica) !== Number(user.clinicaId)
+            ) {
+              continue;
+            }
+
+            const medKey = String(item.id_medicamento || item.clave_ssa || "")
+              .trim()
+              .toLowerCase();
+            const loteKey = String(item.lote || "")
+              .trim()
+              .toLowerCase();
+            const key = `${item.id_clinica}-${medKey}-${loteKey}`;
+
+            const displayItem: DisplayInventoryItem = {
+              id: item.id || key,
+              clave_ssa: item.clave_ssa || "",
+              medicamento: item.medicamento || "Medicamento sin nombre",
+              presentacion: item.presentacion || "Pieza",
+              lote: item.lote || "00000",
+              fecha_caducidad: item.fecha_caducidad || "N/A",
+              stock: Number(item.stock) || 0,
+            };
+
+            const existing = dedupMap.get(key);
+            if (!existing) {
+              dedupMap.set(key, displayItem);
+            } else {
+              // Priorizar el registro que tenga ID numérico (remoto de Supabase) frente al UUID temporal
+              const currentHasNumericId =
+                typeof item.id === "number" ||
+                (!isNaN(Number(item.id)) && !String(item.id).includes("-"));
+              if (currentHasNumericId) {
+                dedupMap.set(key, displayItem);
+              }
+            }
+          }
+
+          return Array.from(dedupMap.values());
         }
 
         // Fallback a db.medicines si aún no hay registros en db.inventario
@@ -121,19 +185,26 @@ export const InventoryPage: React.FC = () => {
         return [];
       }
     },
-    [],
+    [user?.clinicaId],
     [],
   );
 
-  const handleDelete = async (id: string | number) => {
+  const DeleteMedicine = async () => {
+    setConfirmDelete(false);
+
     try {
-      await inventarioRepository.delete(id);
+      await inventarioRepository.delete(medicineToDelete.id);
       await refreshPendingCount();
       toast.success("Registro eliminado del inventario");
     } catch (err) {
       console.error("Error al eliminar del inventario:", err);
       toast.error("No se pudo eliminar el registro");
     }
+  };
+
+  const handleDelete = (medicine: InventoryItem) => {
+    setConfirmDelete(true);
+    setMedicineToDelete(medicine);
   };
 
   const filteredMedicines = useMemo(() => {
@@ -305,7 +376,9 @@ export const InventoryPage: React.FC = () => {
                 <TableHead>Lote</TableHead>
                 <TableHead>Fech. caducidad</TableHead>
                 <TableHead>Stock</TableHead>
-                <TableHead className="text-right">Operaciones</TableHead>
+                {user?.role !== "Personal" && (
+                  <TableHead className="text-right">Operaciones</TableHead>
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -316,7 +389,7 @@ export const InventoryPage: React.FC = () => {
                   currentTimestamp,
                 );
                 return (
-                  <TableRow key={m.id}>
+                  <TableRow key={m.id} className="border-0">
                     <TableCell className="font-mono font-medium text-slate-700">
                       {m.clave_ssa || "00000"}
                     </TableCell>
@@ -350,17 +423,19 @@ export const InventoryPage: React.FC = () => {
                         )}
                       </span>
                     </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => handleDelete(m.id)}
-                        title="Eliminar registro"
-                        className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </TableCell>
+                    {user?.role !== "Personal" && (
+                      <TableCell className="flex justify-center items-center">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => handleDelete(m)}
+                          title="Eliminar registro"
+                          className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </TableCell>
+                    )}
                   </TableRow>
                 );
               })}
@@ -368,6 +443,50 @@ export const InventoryPage: React.FC = () => {
           </Table>
         </Card>
       )}
+      <AlertDialog open={confirmDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              ¿Deseas quitar {medicineToDelete?.medicamento} del inventario?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              <p className="text-sm mb-3">
+                Para eliminar el medicamento ingresa su lote:
+              </p>
+              <Input
+                type="text"
+                value={loteToVerify}
+                onChange={(e) => setLoteToVerify(e.target.value)}
+              />
+              {loteToVerify === medicineToDelete?.lote && (
+                <span className="text-red-500 text-sm font-semibold italic">
+                  * Recuerda quitar físicamente el medicamento del almacén
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => {
+                setConfirmDelete(false);
+                setLoteToVerify("");
+              }}
+            >
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() =>
+                loteToVerify === medicineToDelete?.lote
+                  ? DeleteMedicine()
+                  : null
+              }
+              disabled={loteToVerify !== medicineToDelete?.lote}
+            >
+              Continuar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

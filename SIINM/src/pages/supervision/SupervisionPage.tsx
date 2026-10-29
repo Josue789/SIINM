@@ -1,8 +1,8 @@
-import React, { useState } from 'react'
-import { Search, Building2, MoreVertical } from 'lucide-react'
-import { Card } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
+import React, { useEffect, useState } from "react";
+import { Search, Building2, MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -10,36 +10,57 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table'
+} from "@/components/ui/table";
+import type { Clinica, InventarioItem } from "@/types/inventory.types";
+import { inventarioRepository } from "@/db/repositories/inventario.repository";
+import { clinicaRepository } from "@/db/repositories/clinica.repository";
+import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export const SupervisionPage: React.FC = () => {
-  const [selectedClinic, setSelectedClinic] = useState('Clínica Central Norte')
-  const [search, setSearch] = useState('')
+  const [selectedClinic, setSelectedClinic] = useState<number>(0);
+  const [search, setSearch] = useState("");
 
-  const clinicsData = [
-    {
-      id: '1',
-      ssa: '00100',
-      medicamento: 'paracetamol',
-      lote: '00000',
-      caducidad: 'Oct/26',
-      stock: 5,
-    },
-    {
-      id: '2',
-      ssa: '00102',
-      medicamento: 'ibuprofeno 400mg',
-      lote: 'B5541',
-      caducidad: 'Nov/26',
-      stock: 18,
-    },
-  ]
+  const [clinicsData, setClinicsData] = useState<Clinica[]>([]);
+  const [inventarios, setInventarios] = useState<InventarioItem[]>([]);
 
-  const filteredData = clinicsData.filter(
-    (item) =>
+  useEffect(() => {
+    const fetchClinicsList = async () => {
+      try {
+        const response = await clinicaRepository.getAll();
+        setClinicsData(response);
+        setSelectedClinic(response[0].id);
+      } catch (error) {
+        console.error("Error fetching clinics data:", error);
+      }
+    };
+    const fetchClinicsData = async () => {
+      try {
+        const response = await inventarioRepository.getAll();
+        setInventarios(response);
+      } catch (error) {
+        console.error("Error fetching clinics data:", error);
+      }
+    };
+    fetchClinicsList();
+    fetchClinicsData();
+  }, []);
+
+  const filteredData = inventarios.filter((item) => {
+    const searchMatch =
       item.medicamento.toLowerCase().includes(search.toLowerCase()) ||
-      item.ssa.toLowerCase().includes(search.toLowerCase())
-  )
+      item.clave_ssa.toLowerCase().includes(search.toLowerCase()) ||
+      item.lote.toLowerCase().includes(search.toLowerCase());
+    const clinicMatch = selectedClinic
+      .toString()
+      .includes(item.id_clinica.toString());
+    return searchMatch && clinicMatch;
+  });
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -61,12 +82,14 @@ export const SupervisionPage: React.FC = () => {
             <Building2 className="w-4 h-4 text-slate-400" />
             <select
               value={selectedClinic}
-              onChange={(e) => setSelectedClinic(e.target.value)}
+              onChange={(e) => setSelectedClinic(Number(e.target.value))}
               className="bg-transparent text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer"
             >
-              <option value="Clínica Central Norte">Clínica Central Norte</option>
-              <option value="Unidad Médica Sur">Unidad Médica Sur</option>
-              <option value="Módulo Rural Poniente">Módulo Rural Poniente</option>
+              {clinicsData.map((clinic) => (
+                <option key={clinic.id} value={clinic.id}>
+                  {clinic.nombre}
+                </option>
+              ))}
             </select>
           </div>
         </div>
@@ -97,20 +120,53 @@ export const SupervisionPage: React.FC = () => {
           </TableHeader>
           <TableBody>
             {filteredData.map((item) => (
-              <TableRow key={item.id}>
-                <TableCell className="font-mono font-medium text-slate-700">{item.ssa}</TableCell>
-                <TableCell className="font-semibold text-slate-800">{item.medicamento}</TableCell>
-                <TableCell className="font-mono text-slate-600">{item.lote}</TableCell>
-                <TableCell className="font-bold text-red-500">{item.caducidad}</TableCell>
-                <TableCell className="font-bold text-slate-800">{item.stock}</TableCell>
-                <TableCell className="text-right">
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-8 w-8 text-slate-400 hover:text-slate-600"
+              <TableRow key={item.id} className="border-0">
+                <TableCell className="font-mono font-medium text-slate-700">
+                  {item.clave_ssa}
+                </TableCell>
+                <TableCell className="font-semibold text-slate-800">
+                  {item.medicamento}
+                </TableCell>
+                <TableCell className="font-mono text-slate-600">
+                  {item.lote}
+                </TableCell>
+                <TableCell className="font-bold">
+                  <Badge
+                    variant={
+                      new Date(item.fecha_caducidad) >
+                      new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+                        ? "default"
+                        : "destructive"
+                    }
                   >
-                    <MoreVertical className="w-4 h-4" />
-                  </Button>
+                    {item.fecha_caducidad}
+                  </Badge>
+                </TableCell>
+                <TableCell className="font-bold text-slate-800">
+                  {item.stock}
+                </TableCell>
+                <TableCell className="flex justify-center items-center">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 text-slate-400 hover:text-slate-600"
+                      >
+                        <MoreVertical className="w-4 h-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent className="dark:bg-white dark:border-gray-200 ">
+                      <DropdownMenuItem className="cursor-pointer text-slate-700 ">
+                        <Pencil className="w-4 h-4 mr-2 " />
+                        Ajustar Cantidad
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className="cursor-pointer text-red-700 ">
+                        <Trash2 className="w-4 h-4 mr-2 " />
+                        Eliminar
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </TableCell>
               </TableRow>
             ))}
@@ -118,6 +174,5 @@ export const SupervisionPage: React.FC = () => {
         </Table>
       </Card>
     </div>
-  )
-}
-
+  );
+};
