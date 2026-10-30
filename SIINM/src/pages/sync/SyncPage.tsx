@@ -1,11 +1,19 @@
-import React, { useEffect, useState, useCallback } from 'react'
-import { RefreshCw, CheckCircle2, Clock, CloudUpload, HardDrive, Wifi, WifiOff } from 'lucide-react'
-import { syncQueueRepository } from '../../db/repositories/syncQueue.repository'
-import { useNetwork } from '../../context/NetworkContext'
-import type { SyncQueueItem } from '../../types/sync.types'
-import { Card } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+import React, { useEffect, useState, useCallback } from "react";
+import {
+  RefreshCw,
+  CheckCircle2,
+  Clock,
+  CloudUpload,
+  HardDrive,
+  Wifi,
+  WifiOff,
+} from "lucide-react";
+import { syncQueueRepository } from "../../db/repositories/syncQueue.repository";
+import { useNetwork } from "../../context/NetworkContext";
+import type { SyncQueueItem } from "../../types/sync.types";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -13,31 +21,31 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table'
+} from "@/components/ui/table";
 
 export const SyncPage: React.FC = () => {
-  const [queueItems, setQueueItems] = useState<SyncQueueItem[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const { isOnline, isSyncing, triggerSync, lastSyncAt } = useNetwork()
+  const [queueItems, setQueueItems] = useState<SyncQueueItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const { isOnline, isSyncing, triggerSync, lastSyncAt } = useNetwork();
 
   const loadQueue = useCallback(async () => {
-    setIsLoading(true)
+    setIsLoading(true);
     try {
-      const items = await syncQueueRepository.getPending()
-      setQueueItems(items)
+      const items = await syncQueueRepository.getPending();
+      setQueueItems(items);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }, [])
+  }, []);
 
   useEffect(() => {
-    loadQueue()
-  }, [loadQueue, isSyncing])
+    loadQueue();
+  }, [loadQueue, isSyncing]);
 
   const handleManualSync = async () => {
-    await triggerSync()
-    await loadQueue()
-  }
+    await triggerSync();
+    await loadQueue();
+  };
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
@@ -47,7 +55,8 @@ export const SyncPage: React.FC = () => {
             Estado de Sincronización
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Monitorea la cola de cambios locales pendientes de sincronizar con Supabase
+            Monitorea la cola de cambios locales pendientes de sincronizar con
+            Supabase
           </p>
         </div>
 
@@ -56,8 +65,10 @@ export const SyncPage: React.FC = () => {
           disabled={!isOnline || isSyncing}
           className="gap-2 shrink-0 self-start sm:self-auto"
         >
-          <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-          <span>{isSyncing ? 'Sincronizando...' : 'Forzar Sincronización'}</span>
+          <RefreshCw className={`w-4 h-4 ${isSyncing ? "animate-spin" : ""}`} />
+          <span>
+            {isSyncing ? "Sincronizando..." : "Forzar Sincronización"}
+          </span>
         </Button>
       </div>
 
@@ -66,15 +77,23 @@ export const SyncPage: React.FC = () => {
         <Card className="p-4 flex items-center gap-4">
           <div
             className={`p-3 rounded-xl ${
-              isOnline ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'
+              isOnline
+                ? "bg-emerald-50 text-emerald-600"
+                : "bg-rose-50 text-rose-600"
             }`}
           >
-            {isOnline ? <Wifi className="w-5 h-5" /> : <WifiOff className="w-5 h-5" />}
+            {isOnline ? (
+              <Wifi className="w-5 h-5" />
+            ) : (
+              <WifiOff className="w-5 h-5" />
+            )}
           </div>
           <div>
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Red</div>
+            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+              Red
+            </div>
             <div className="text-sm font-bold text-slate-800">
-              {isOnline ? 'Conectado a Internet' : 'Sin Conexión (Offline)'}
+              {isOnline ? "Conectado a Internet" : "Sin Conexión (Offline)"}
             </div>
           </div>
         </Card>
@@ -84,8 +103,12 @@ export const SyncPage: React.FC = () => {
             <HardDrive className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">IndexedDB (Dexie)</div>
-            <div className="text-sm font-bold text-slate-800">Activa y saludable</div>
+            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+              IndexedDB (Dexie)
+            </div>
+            <div className="text-sm font-bold text-slate-800">
+              Activa y saludable
+            </div>
           </div>
         </Card>
 
@@ -94,9 +117,11 @@ export const SyncPage: React.FC = () => {
             <CloudUpload className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Última Sincronización</div>
+            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+              Última Sincronización
+            </div>
             <div className="text-sm font-bold text-slate-800">
-              {lastSyncAt ? new Date(lastSyncAt).toLocaleTimeString() : 'Nunca'}
+              {lastSyncAt ? new Date(lastSyncAt).toLocaleTimeString() : "Nunca"}
             </div>
           </div>
         </Card>
@@ -114,13 +139,18 @@ export const SyncPage: React.FC = () => {
         </div>
 
         {isLoading ? (
-          <div className="p-8 text-center text-slate-400 text-xs">Examinando cola local...</div>
+          <div className="p-8 text-center text-slate-400 text-xs">
+            Examinando cola local...
+          </div>
         ) : queueItems.length === 0 ? (
           <div className="p-12 text-center">
             <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-2 opacity-80" />
-            <h4 className="text-sm font-bold text-slate-800 mb-1">¡Todo está sincronizado!</h4>
+            <h4 className="text-sm font-bold text-slate-800 mb-1">
+              ¡Todo está sincronizado!
+            </h4>
             <p className="text-xs text-slate-500 max-w-sm mx-auto">
-              No hay cambios pendientes en tu almacenamiento local. Todos los registros coinciden con la nube.
+              No hay cambios pendientes en tu almacenamiento local. Todos los
+              registros coinciden con la nube.
             </p>
           </div>
         ) : (
@@ -138,25 +168,29 @@ export const SyncPage: React.FC = () => {
             <TableBody>
               {queueItems.map((item) => (
                 <TableRow key={item.id}>
-                  <TableCell className="font-mono font-medium text-slate-800">{item.tableName}</TableCell>
+                  <TableCell className="font-mono font-medium text-slate-800">
+                    {item.tableName}
+                  </TableCell>
                   <TableCell>
                     <Badge
                       variant={
-                        item.action === 'insert'
-                          ? 'success'
-                          : item.action === 'update'
-                          ? 'default'
-                          : 'destructive'
+                        item.action === "insert"
+                          ? "success"
+                          : item.action === "update"
+                            ? "default"
+                            : "destructive"
                       }
                       className="uppercase text-[10px]"
                     >
                       {item.action}
                     </Badge>
                   </TableCell>
-                  <TableCell className="font-mono text-slate-500 truncate max-w-[150px]">
+                  <TableCell className="font-mono text-slate-500 truncate max-w-37.5">
                     {item.recordId}
                   </TableCell>
-                  <TableCell className="font-semibold text-slate-700">{item.attempts}</TableCell>
+                  <TableCell className="font-semibold text-slate-700">
+                    {item.attempts}
+                  </TableCell>
                   <TableCell className="text-slate-500">
                     <span className="inline-flex items-center gap-1 text-xs">
                       <Clock className="w-3.5 h-3.5 text-slate-400" />
@@ -175,5 +209,5 @@ export const SyncPage: React.FC = () => {
         )}
       </Card>
     </div>
-  )
-}
+  );
+};

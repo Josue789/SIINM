@@ -13,6 +13,7 @@ import {
   Menu,
   X,
   User as UserIcon,
+  Pill,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useNetwork } from "../context/NetworkContext";
@@ -124,9 +125,14 @@ export const MainLayout: React.FC = () => {
         <div className="flex flex-col flex-1 overflow-y-auto">
           {/* Header Brand */}
           <div className="text-center pt-2 pb-6 border-b border-slate-200/70">
-            <h1 className="text-2xl font-black text-slate-800 tracking-wider m-0">
-              SIINM
-            </h1>
+            <div className="flex items-center justify-center gap-2">
+              <div className="flex items-center justify-center w-8 h-8 bg-blue-100 rounded-lg">
+                <Pill size={20} className="text-blue-700" />
+              </div>
+              <h1 className="text-xl font-black text-slate-800 tracking-wider m-0">
+                SIINM
+              </h1>
+            </div>
             <p className="text-xs text-slate-500 font-medium m-0 mt-0.5">
               Sistema de Inventario de Insumos Médicos
             </p>
@@ -230,7 +236,7 @@ export const MainLayout: React.FC = () => {
                 {user?.fullName || user?.email || "Usuario"}
               </p>
               <p className="text-[10px] text-slate-500 font-medium truncate m-0 leading-tight uppercase">
-                {user?.role || "Farmacéutico"}
+                {user?.role || "Farmacéutico"} | {user?.clinicaNombre}
               </p>
             </div>
             <button

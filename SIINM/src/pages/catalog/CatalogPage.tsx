@@ -53,6 +53,7 @@ import {
   AlertDialogHeader,
 } from "@/components/ui/alert-dialog";
 import { useAuth } from "@/context/AuthContext";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export const CatalogPage: React.FC = () => {
   const { isOnline, isSyncing, triggerSync } = useNetwork();
@@ -76,12 +77,10 @@ export const CatalogPage: React.FC = () => {
 
   // Consulta reactiva a Dexie en tiempo real. Se actualiza sola cuando llega un evento
   // de Supabase Realtime o una mutación local. No requiere polling ni bucles de conexión.
-  const catalogItems =
-    useLiveQuery(
-      () => medicineRepository.getAll(),
-      [],
-      [] as CatalogoMedicamento[],
-    ) || [];
+  const rawCatalogItems = useLiveQuery(() => medicineRepository.getAll(), []);
+  const catalogItems = rawCatalogItems ?? [];
+  const isLoading =
+    rawCatalogItems === undefined || (isSyncing && catalogItems.length === 0);
 
   //Actualiza su estatus de un medicamento (Activo/Inactivo)
   const updateMedicineStatus = async (id: string, newStatus: string) => {
@@ -164,7 +163,8 @@ export const CatalogPage: React.FC = () => {
       setNewCode("");
       setIsDialogOpen(false);
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : "Error al añadir medicamento";
+      const msg =
+        error instanceof Error ? error.message : "Error al añadir medicamento";
       if (msg.includes("duplicado")) toast.error(msg);
       else toast.error(msg);
     }
@@ -482,10 +482,37 @@ export const CatalogPage: React.FC = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredItems.length === 0 ? (
+            {isLoading ? (
+              Array.from({ length: 6 }).map((_, idx) => (
+                <TableRow
+                  key={`skeleton-row-${idx}`}
+                  className="border-b border-slate-100/80"
+                >
+                  <TableCell className="py-3">
+                    <Skeleton className="h-4 w-24 bg-slate-200" />
+                  </TableCell>
+                  <TableCell className="py-3">
+                    <Skeleton className="h-4 w-52 bg-slate-200" />
+                  </TableCell>
+                  <TableCell className="py-3">
+                    <Skeleton className="h-4 w-28 bg-slate-200" />
+                  </TableCell>
+                  <TableCell className="py-3">
+                    <Skeleton className="h-5 w-16 rounded-full bg-slate-200" />
+                  </TableCell>
+                  {isAdmin && (
+                    <TableCell className="py-3 text-right">
+                      <div className="flex justify-end">
+                        <Skeleton className="h-8 w-8 rounded-md bg-slate-200" />
+                      </div>
+                    </TableCell>
+                  )}
+                </TableRow>
+              ))
+            ) : filteredItems.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={isAdmin ? 5 : 4}
                   className="h-36 text-center text-slate-500 py-8"
                 >
                   <p className="font-semibold text-sm text-slate-700 mb-1">
