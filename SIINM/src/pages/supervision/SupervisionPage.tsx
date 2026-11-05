@@ -295,7 +295,7 @@ export const SupervisionPage: React.FC = () => {
                       item.stock
                     )}
                   </TableCell>
-                  <TableCell className="flex justify-center items-center">
+                  <TableCell className="text-center">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button
@@ -312,7 +312,7 @@ export const SupervisionPage: React.FC = () => {
                             setStock(item.stock);
                             setIdToEdit(item.id.toString());
                           }}
-                          className="cursor-pointer text-slate-700 "
+                          className="cursor-pointer dark:text-gray-800 hover:bg-gray-200 p-2 text-xs flex items-center"
                         >
                           <Pencil className="w-4 h-4 mr-2 " />
                           Ajustar Cantidad
@@ -322,7 +322,7 @@ export const SupervisionPage: React.FC = () => {
                             setOpenDialog(true);
                             setMedicineToDelete(item);
                           }}
-                          className="cursor-pointer text-red-700 "
+                          className="cursor-pointer dark:text-red-600 hover:bg-gray-200 p-2 text-xs flex items-center text-red-600"
                         >
                           <Trash2 className="w-4 h-4 mr-2 " />
                           Eliminar

@@ -14,6 +14,7 @@ import {
   X,
   User as UserIcon,
   Pill,
+  WifiOff,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useNetwork } from "../context/NetworkContext";
@@ -210,9 +211,18 @@ export const MainLayout: React.FC = () => {
                 ? "Hacer clic para sincronizar con el servidor"
                 : "Sin conexión a internet"
             }
-            className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors shadow-2xs"
+            className={
+              "w-full flex items-center justify-center gap-2 py-2 px-3 rounded-full text-xs font-semibold" +
+              (isOnline
+                ? " bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors shadow-2xs"
+                : "bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors shadow-2xs")
+            }
           >
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+            {isOnline ? (
+              <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
+            ) : (
+              <WifiOff className="w-3.5 h-3.5 shrink-0 text-amber-600" />
+            )}
             <span className="truncate">
               {isSyncing
                 ? "Sincronizando..."

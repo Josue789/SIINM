@@ -11,6 +11,7 @@ import {
   Wifi,
   WifiOff,
   RefreshCw,
+  Copy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,26 +55,40 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useAuth } from "@/context/AuthContext";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useForm } from "react-hook-form";
+import copy from "copy-to-clipboard";
 
 export const CatalogPage: React.FC = () => {
   const { isOnline, isSyncing, triggerSync } = useNetwork();
+  const { user: currentUser } = useAuth();
+  const isAdmin = currentUser?.role === "admin";
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("todos");
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [newSsa, setNewSsa] = useState("");
-  const [newMedicine, setNewMedicine] = useState("");
-  const [newPresentation, setNewPresentation] = useState("");
-  const [newQuantity, setNewQuantity] = useState("1");
-  const [newCode, setNewCode] = useState("");
+
+  // Valores de nuevo o edicion de medicamento
+  interface formValue {
+    medicamento: string;
+    presentacion: string;
+    cantidad: number;
+    codigo: string;
+    ssa: string;
+  }
+  const {
+    reset,
+    handleSubmit,
+    register,
+    formState: { errors },
+  } = useForm<formValue>();
   const [isAddingMedicine, setIsAddingMedicine] = useState(true);
   const [idAtEdit, setIdAtEdit] = useState("");
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+
+  // Valores de eliminacion
   const [isDialogDelete, setIsDialogDelete] = useState(false);
   const [codeConfirmation, setCodeConfirmation] = useState("");
   const [itemToDelete, setItemToDelete] = useState<CatalogoMedicamento | null>(
     null,
   );
-  const { user: currentUser } = useAuth();
-  const isAdmin = currentUser?.role === "admin";
 
   // Consulta reactiva a Dexie en tiempo real. Se actualiza sola cuando llega un evento
   // de Supabase Realtime o una mutación local. No requiere polling ni bucles de conexión.
@@ -91,26 +106,22 @@ export const CatalogPage: React.FC = () => {
   };
 
   // Al dar enviar maneja si es editado o enviado
-  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  const onSubmit = (data: formValue) => {
     if (isAddingMedicine) {
-      handleAddMedicine(e);
+      handleAddMedicine(data);
     } else {
-      handleUpdateMedicine(e);
+      handleUpdateMedicine(data);
     }
   };
 
   // Manejo de actualizacion de medicamento
-  const handleUpdateMedicine = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newMedicine.trim()) return;
-
+  const handleUpdateMedicine = async (data: formValue) => {
     const medicine: Partial<CatalogoMedicamento> = {
-      codigo_barras: newCode.trim() || "",
-      clave_ssa: newSsa.trim() || "00000",
-      medicamento: newMedicine.trim(),
-      presentacion: newPresentation.trim() || "Pieza",
-      cantidadPorPieza: parseInt(newQuantity) || 1,
+      codigo_barras: data.codigo.trim() || "",
+      clave_ssa: data.ssa.trim() || "00000",
+      medicamento: data.medicamento.trim(),
+      presentacion: data.presentacion.trim() || "Pieza",
+      cantidadPorPieza: data.cantidad || 1,
       activo: true,
     };
 
@@ -122,11 +133,7 @@ export const CatalogPage: React.FC = () => {
       }
 
       setIdAtEdit("");
-      setNewSsa("");
-      setNewMedicine("");
-      setNewPresentation("");
-      setNewQuantity("1");
-      setNewCode("");
+      reset();
       setIsDialogOpen(false);
       setIsAddingMedicine(true);
       toast.success("Medicamento actualizado");
@@ -136,17 +143,14 @@ export const CatalogPage: React.FC = () => {
   };
 
   // Manejo de agregar medicamento
-  const handleAddMedicine = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newMedicine.trim()) return;
-
+  const handleAddMedicine = async (data: formValue) => {
     const medicine: CatalogoMedicamento = {
       id: crypto.randomUUID(),
-      codigo_barras: newCode.trim() || "",
-      clave_ssa: newSsa.trim() || "00000",
-      medicamento: newMedicine.trim(),
-      presentacion: newPresentation.trim() || "Pieza",
-      cantidadPorPieza: parseInt(newQuantity) || 1,
+      codigo_barras: data.codigo.trim() || "",
+      clave_ssa: data.ssa.trim() || "00000",
+      medicamento: data.medicamento.trim(),
+      presentacion: data.presentacion.trim() || "Pieza",
+      cantidadPorPieza: data.cantidad || 1,
       activo: true,
     };
     try {
@@ -155,12 +159,7 @@ export const CatalogPage: React.FC = () => {
       if (isOnline) {
         triggerSync().catch();
       }
-
-      setNewSsa("");
-      setNewMedicine("");
-      setNewPresentation("");
-      setNewQuantity("1");
-      setNewCode("");
+      reset();
       setIsDialogOpen(false);
     } catch (error: unknown) {
       const msg =
@@ -221,11 +220,19 @@ export const CatalogPage: React.FC = () => {
     setIsAddingMedicine(false);
     setIsDialogOpen(true);
     setIdAtEdit(item.id);
-    setNewSsa(item.clave_ssa);
-    setNewMedicine(item.medicamento);
-    setNewPresentation(item.presentacion);
-    setNewQuantity((item.cantidadPorPieza || 1).toString());
-    setNewCode(item.codigo_barras);
+    reset({
+      cantidad: item.cantidadPorPieza,
+      ssa: item.clave_ssa,
+      codigo: item.codigo_barras,
+      presentacion: item.presentacion,
+      medicamento: item.medicamento,
+    });
+  };
+
+  // Manejo de clipboard
+  const oncopy = (text: string) => {
+    copy(text);
+    toast("Elemento copiado al portapapeles");
   };
 
   return (
@@ -293,7 +300,7 @@ export const CatalogPage: React.FC = () => {
                   </Button>
                 </DialogTrigger>
                 <DialogContent>
-                  <form onSubmit={onSubmit} className="space-y-4">
+                  <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                     <DialogHeader>
                       <DialogTitle>
                         {isAddingMedicine
@@ -313,10 +320,14 @@ export const CatalogPage: React.FC = () => {
                         </label>
                         <Input
                           placeholder="Ej. 010.000.0410.00"
-                          value={newSsa}
-                          onChange={(e) => setNewSsa(e.target.value)}
-                          required
+                          className={errors.ssa ? "border-red-500" : ""}
+                          {...register("ssa", {
+                            required: "La clave SSA es obligatoria",
+                          })}
                         />
+                        <span className="text-red-700 text-xs font-semibold">
+                          {errors.ssa?.message.toString()}
+                        </span>
                       </div>
 
                       <div>
@@ -325,10 +336,14 @@ export const CatalogPage: React.FC = () => {
                         </label>
                         <Input
                           placeholder="Ej. 7501012345678"
-                          value={newCode}
-                          onChange={(e) => setNewCode(e.target.value)}
-                          required
+                          className={errors.codigo ? "border-red-500" : ""}
+                          {...register("codigo", {
+                            required: "El codigo de barras es obligatoria",
+                          })}
                         />
+                        <span className="text-red-700 text-xs font-semibold">
+                          {errors.codigo?.message.toString()}
+                        </span>
                       </div>
 
                       <div>
@@ -337,10 +352,15 @@ export const CatalogPage: React.FC = () => {
                         </label>
                         <Input
                           placeholder="Ej. Paracetamol 500mg"
-                          value={newMedicine}
-                          onChange={(e) => setNewMedicine(e.target.value)}
-                          required
+                          className={errors.medicamento ? "border-red-500" : ""}
+                          {...register("medicamento", {
+                            required:
+                              "El nombre del medicamento es obligatoria",
+                          })}
                         />
+                        <span className="text-red-700 text-xs font-semibold">
+                          {errors.medicamento?.message.toString()}
+                        </span>
                       </div>
 
                       <div className="grid grid-cols-2 gap-3">
@@ -350,9 +370,16 @@ export const CatalogPage: React.FC = () => {
                           </label>
                           <Input
                             placeholder="Ej. Caja c/20 tabletas"
-                            value={newPresentation}
-                            onChange={(e) => setNewPresentation(e.target.value)}
+                            className={
+                              errors.presentacion ? "border-red-500" : ""
+                            }
+                            {...register("presentacion", {
+                              required: "La presentacion es obligatoria",
+                            })}
                           />
+                          <span className="text-red-700 text-xs font-semibold">
+                            {errors.presentacion?.message.toString()}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -534,7 +561,17 @@ export const CatalogPage: React.FC = () => {
                 return (
                   <TableRow key={item.id} className="border-0">
                     <TableCell className="font-mono font-medium text-slate-700">
-                      {item.clave_ssa || item.ssa || "---"}
+                      <div className="flex flex-row items-center">
+                        <p>{item.clave_ssa || item.ssa || "---"}</p>
+                        <Button
+                          variant="ghost"
+                          onClick={() => {
+                            oncopy(item.clave_ssa);
+                          }}
+                        >
+                          <Copy />
+                        </Button>
+                      </div>
                     </TableCell>
                     <TableCell className="font-semibold text-slate-800">
                       {item.medicamento || item.name || "---"}
@@ -556,7 +593,7 @@ export const CatalogPage: React.FC = () => {
                       </Badge>
                     </TableCell>
                     {isAdmin && (
-                      <TableCell className="text-right">
+                      <TableCell className="text-center">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
@@ -573,7 +610,7 @@ export const CatalogPage: React.FC = () => {
                                 onClick={() => {
                                   openDialogToEdit(item);
                                 }}
-                                className="cursor-pointer dark:text-gray-800 hover:bg-gray-100"
+                                className="cursor-pointer dark:text-gray-800 hover:bg-gray-200 p-2 text-xs flex items-center"
                               >
                                 <div className="flex items-center">
                                   <PencilIcon className="w-4 h-4 mr-2" />
@@ -581,7 +618,7 @@ export const CatalogPage: React.FC = () => {
                                 </div>
                               </DropdownMenuItem>
                               <DropdownMenuItem
-                                className="cursor-pointer dark:text-gray-800 hover:bg-gray-100"
+                                className="cursor-pointer dark:text-gray-800 hover:bg-gray-200 p-2 text-xs flex items-center"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setItemToDelete(item);
@@ -595,7 +632,7 @@ export const CatalogPage: React.FC = () => {
                               </DropdownMenuItem>
                             </DropdownMenuGroup>
                             <DropdownMenuItem
-                              className="cursor-pointer dark:text-gray-800 hover:bg-gray-100 border-t-gray-100 border-t-2"
+                              className="cursor-pointer dark:text-gray-800 hover:bg-gray-200 p-2 text-xs flex items-center"
                               onClick={() => {
                                 const newStatus = isActivo
                                   ? "Inactivo"

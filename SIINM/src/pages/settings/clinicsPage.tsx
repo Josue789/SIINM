@@ -14,6 +14,7 @@ import {
   MapPin,
   Phone,
   Hash,
+  Copy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,23 +57,35 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useForm } from "react-hook-form";
+import copy from "copy-to-clipboard";
 
 export const ClinicsPage: React.FC = () => {
   const { isOnline } = useNetwork();
   const [clinics, setClinics] = useState<Clinica[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<"todos" | "activo" | "inactivo">("todos");
+  const [filter, setFilter] = useState<"todos" | "activo" | "inactivo">(
+    "todos",
+  );
 
   // Estados del modal de creación / edición
+  interface formValues {
+    nombre: string;
+    clues: string;
+    ubicacion: string;
+    telefono: string;
+  }
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [idAtEdit, setIdAtEdit] = useState<number | null>(null);
-  const [nombre, setNombre] = useState("");
-  const [clues, setClues] = useState("");
-  const [ubicacion, setUbicacion] = useState("");
-  const [telefono, setTelefono] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const {
+    register,
+    reset,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<formValues>();
 
   // Estados del modal de confirmación de eliminación
   const [isDialogDelete, setIsDialogDelete] = useState(false);
@@ -87,7 +100,8 @@ export const ClinicsPage: React.FC = () => {
       const data = await clinicaRepository.getAll();
       setClinics(data);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Error al cargar clínicas";
+      const msg =
+        err instanceof Error ? err.message : "Error al cargar clínicas";
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -107,60 +121,47 @@ export const ClinicsPage: React.FC = () => {
     };
   }, []);
 
-  // Limpiar campos del formulario
-  const resetForm = () => {
-    setIsEditing(false);
-    setIdAtEdit(null);
-    setNombre("");
-    setClues("");
-    setUbicacion("");
-    setTelefono("");
-  };
-
   // Abrir diálogo para editar
   const openDialogToEdit = (clinic: Clinica) => {
     setIsEditing(true);
     setIdAtEdit(clinic.id);
-    setNombre(clinic.nombre || "");
-    setClues(clinic.clues || "");
-    setUbicacion(clinic.ubicacion || "");
-    setTelefono(clinic.telefono || "");
+    reset({
+      nombre: clinic.nombre,
+      clues: clinic.clues,
+      telefono: clinic.telefono,
+      ubicacion: clinic.ubicacion,
+    });
     setIsDialogOpen(true);
   };
 
   // Guardar (crear o actualizar)
-  const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!nombre.trim()) {
-      toast.warn("El nombre de la clínica es obligatorio");
-      return;
-    }
-
+  const onSubmit = async (data: formValues) => {
     try {
       setIsSubmitting(true);
       if (isEditing && idAtEdit !== null) {
         await clinicaRepository.update(idAtEdit, {
-          nombre: nombre.trim(),
-          clues: clues.trim() || undefined,
-          ubicacion: ubicacion.trim() || undefined,
-          telefono: telefono.trim() || undefined,
+          nombre: data.nombre.trim(),
+          clues: data.clues.trim() || undefined,
+          ubicacion: data.ubicacion.trim() || undefined,
+          telefono: data.telefono.trim() || undefined,
         });
         toast.success("Clínica actualizada correctamente");
       } else {
         await clinicaRepository.create({
-          nombre: nombre.trim(),
-          clues: clues.trim() || undefined,
-          ubicacion: ubicacion.trim() || undefined,
-          telefono: telefono.trim() || undefined,
+          nombre: data.nombre.trim(),
+          clues: data.clues.trim() || undefined,
+          ubicacion: data.ubicacion.trim() || undefined,
+          telefono: data.telefono.trim() || undefined,
           activo: true,
         });
         toast.success("Clínica agregada exitosamente");
       }
       setIsDialogOpen(false);
-      resetForm();
+      reset();
       await fetchClinics();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Error al guardar clínica";
+      const msg =
+        err instanceof Error ? err.message : "Error al guardar clínica";
       toast.error(msg);
     } finally {
       setIsSubmitting(false);
@@ -175,7 +176,8 @@ export const ClinicsPage: React.FC = () => {
       toast.success(newStatus ? "Clínica activada" : "Clínica desactivada");
       await fetchClinics();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Error al cambiar estatus";
+      const msg =
+        err instanceof Error ? err.message : "Error al cambiar estatus";
       toast.error(msg);
     }
   };
@@ -192,7 +194,8 @@ export const ClinicsPage: React.FC = () => {
       setConfirmationName("");
       await fetchClinics();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Error al eliminar clínica";
+      const msg =
+        err instanceof Error ? err.message : "Error al eliminar clínica";
       toast.error(msg);
     } finally {
       setIsDeleting(false);
@@ -221,6 +224,12 @@ export const ClinicsPage: React.FC = () => {
     });
   }, [clinics, search, filter]);
 
+  //Manejo de clipboard
+  const oncopy = (text: string) => {
+    copy(text);
+    toast("Elemento copiado al portapapeles");
+  };
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* Encabezado */}
@@ -231,7 +240,8 @@ export const ClinicsPage: React.FC = () => {
             Catálogo de Unidades Médicas
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Gestión de clínicas, centros de salud y almacenes (100% online con Supabase)
+            Gestión de clínicas, centros de salud y almacenes (100% online con
+            Supabase)
           </p>
         </div>
 
@@ -263,7 +273,9 @@ export const ClinicsPage: React.FC = () => {
             className="gap-1.5 h-8 text-xs border-slate-200 hover:bg-slate-50 text-slate-700"
             title="Recargar desde Supabase"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw
+              className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`}
+            />
             <span>Actualizar</span>
           </Button>
 
@@ -272,7 +284,7 @@ export const ClinicsPage: React.FC = () => {
             open={isDialogOpen}
             onOpenChange={(open) => {
               setIsDialogOpen(open);
-              if (!open) resetForm();
+              if (!open) reset();
             }}
           >
             <DialogTrigger asChild>
@@ -282,27 +294,32 @@ export const ClinicsPage: React.FC = () => {
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-md">
-              <form onSubmit={onSubmit} className="space-y-4">
+              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                 <DialogHeader>
                   <DialogTitle>
                     {isEditing ? "Editar Clínica" : "Añadir Nueva Clínica"}
                   </DialogTitle>
                   <DialogDescription>
-                    Ingresa los datos de la unidad médica para registrarla en el sistema.
+                    Ingresa los datos de la unidad médica para registrarla en el
+                    sistema.
                   </DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-3 py-2">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                      Nombre de la Unidad *
+                      Nombre de la Unidad
                     </label>
                     <Input
+                      className={errors.nombre ? "border-red-500" : ""}
                       placeholder="Ej. Centro de Salud Urbano No. 1"
-                      value={nombre}
-                      onChange={(e) => setNombre(e.target.value)}
-                      required
+                      {...register("nombre", {
+                        required: "El nombre es obligatorio",
+                      })}
                     />
+                    <span className="text-red-700 text-xs font-semibold m-1">
+                      {errors.nombre?.message.toString()}
+                    </span>
                   </div>
 
                   <div>
@@ -310,10 +327,15 @@ export const ClinicsPage: React.FC = () => {
                       Clave CLUES
                     </label>
                     <Input
+                      className={errors.clues ? "border-red-500" : ""}
                       placeholder="Ej. CSSSA001234"
-                      value={clues}
-                      onChange={(e) => setClues(e.target.value)}
+                      {...register("clues", {
+                        required: "El clues es obligatorio",
+                      })}
                     />
+                    <span className="text-red-700 text-xs font-semibold m-1">
+                      {errors.clues?.message.toString()}
+                    </span>
                   </div>
 
                   <div>
@@ -321,10 +343,15 @@ export const ClinicsPage: React.FC = () => {
                       Ubicación / Dirección
                     </label>
                     <Input
+                      className={errors.ubicacion ? "border-red-500" : ""}
                       placeholder="Ej. Av. Hidalgo #100, Col. Centro"
-                      value={ubicacion}
-                      onChange={(e) => setUbicacion(e.target.value)}
+                      {...register("ubicacion", {
+                        required: "La ubicacion es obligatoria",
+                      })}
                     />
+                    <span className="text-red-700 text-xs font-semibold m-1">
+                      {errors.ubicacion?.message.toString()}
+                    </span>
                   </div>
 
                   <div>
@@ -332,10 +359,27 @@ export const ClinicsPage: React.FC = () => {
                       Teléfono de Contacto
                     </label>
                     <Input
+                      className={errors.telefono ? "border-red-500" : ""}
                       placeholder="Ej. 55 1234 5678"
-                      value={telefono}
-                      onChange={(e) => setTelefono(e.target.value)}
+                      {...register("telefono", {
+                        required: "El telefono es obligatorio",
+                        pattern: {
+                          value: /^[0-9]{10}$/,
+                          message: "Deben ser 10 digitos numericos",
+                        },
+                        maxLength: {
+                          value: 10,
+                          message: "Deben ser 10 digitos",
+                        },
+                        minLength: {
+                          value: 10,
+                          message: "Deben ser 10 digitos",
+                        },
+                      })}
                     />
+                    <span className="text-red-700 text-xs font-semibold m-1">
+                      {errors.telefono?.message.toString()}
+                    </span>
                   </div>
                 </div>
 
@@ -345,14 +389,18 @@ export const ClinicsPage: React.FC = () => {
                     variant="outline"
                     onClick={() => {
                       setIsDialogOpen(false);
-                      resetForm();
+                      reset();
                     }}
                     disabled={isSubmitting}
                   >
                     Cancelar
                   </Button>
                   <Button type="submit" disabled={isSubmitting}>
-                    {isSubmitting ? "Guardando..." : isEditing ? "Actualizar" : "Guardar Clínica"}
+                    {isSubmitting
+                      ? "Guardando..."
+                      : isEditing
+                        ? "Actualizar"
+                        : "Guardar Clínica"}
                   </Button>
                 </DialogFooter>
               </form>
@@ -372,7 +420,8 @@ export const ClinicsPage: React.FC = () => {
                     <strong>"{itemToDelete?.nombre}"</strong> en Supabase.
                   </span>
                   <span className="block text-xs text-slate-500">
-                    Escribe exactamente <strong>{itemToDelete?.nombre}</strong> para confirmar:
+                    Escribe exactamente <strong>{itemToDelete?.nombre}</strong>{" "}
+                    para confirmar:
                   </span>
                 </AlertDialogDescription>
               </AlertDialogHeader>
@@ -403,7 +452,8 @@ export const ClinicsPage: React.FC = () => {
                   onClick={confirmDelete}
                   disabled={
                     isDeleting ||
-                    confirmationName.trim() !== (itemToDelete?.nombre || "").trim()
+                    confirmationName.trim() !==
+                      (itemToDelete?.nombre || "").trim()
                   }
                   className="bg-red-600 hover:bg-red-700 text-white font-bold"
                 >
@@ -462,7 +512,9 @@ export const ClinicsPage: React.FC = () => {
           <TableHeader>
             <TableRow className="border-0 bg-gray-50">
               <TableHead className="text-gray-800">CLUES</TableHead>
-              <TableHead className="text-gray-800">Nombre de la Unidad</TableHead>
+              <TableHead className="text-gray-800">
+                Nombre de la Unidad
+              </TableHead>
               <TableHead className="text-gray-800">Ubicación</TableHead>
               <TableHead className="text-gray-800">Teléfono</TableHead>
               <TableHead className="text-gray-800">Estatus</TableHead>
@@ -472,31 +524,51 @@ export const ClinicsPage: React.FC = () => {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-36 text-center text-slate-500 py-8">
+                <TableCell
+                  colSpan={6}
+                  className="h-36 text-center text-slate-500 py-8"
+                >
                   <RefreshCw className="w-6 h-6 animate-spin mx-auto text-blue-500 mb-2" />
-                  <p className="text-xs text-slate-500">Cargando clínicas desde Supabase...</p>
+                  <p className="text-xs text-slate-500">
+                    Cargando clínicas desde Supabase...
+                  </p>
                 </TableCell>
               </TableRow>
             ) : filteredClinics.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-36 text-center text-slate-500 py-8">
+                <TableCell
+                  colSpan={6}
+                  className="h-36 text-center text-slate-500 py-8"
+                >
                   <p className="font-semibold text-sm text-slate-700 mb-1">
                     No se encontraron clínicas registradas
                   </p>
                   <p className="text-xs text-slate-400">
-                    Puedes dar de alta una nueva unidad usando el botón "+ Añadir Clínica".
+                    Puedes dar de alta una nueva unidad usando el botón "+
+                    Añadir Clínica".
                   </p>
                 </TableCell>
               </TableRow>
             ) : (
               filteredClinics.map((item) => {
                 return (
-                  <TableRow key={item.id} className="border-0 hover:bg-slate-50/70 transition-colors">
+                  <TableRow
+                    key={item.id}
+                    className="border-0 hover:bg-slate-50/70 transition-colors"
+                  >
                     <TableCell className="font-mono text-xs font-semibold text-slate-700">
                       {item.clues ? (
                         <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 px-2 py-0.5 rounded">
                           <Hash className="w-3 h-3 text-slate-400" />
                           {item.clues}
+                          <Button
+                            onClick={() => {
+                              oncopy(item.clues);
+                            }}
+                            variant="ghost"
+                          >
+                            <Copy />
+                          </Button>
                         </span>
                       ) : (
                         <span className="text-slate-400 italic">Sin CLUES</span>
@@ -510,6 +582,14 @@ export const ClinicsPage: React.FC = () => {
                         <span className="inline-flex items-center gap-1">
                           <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                           <span>{item.ubicacion}</span>
+                          <Button
+                            onClick={() => {
+                              oncopy(item.ubicacion);
+                            }}
+                            variant="ghost"
+                          >
+                            <Copy />
+                          </Button>
                         </span>
                       ) : (
                         <span className="text-slate-400">---</span>
@@ -520,6 +600,14 @@ export const ClinicsPage: React.FC = () => {
                         <span className="inline-flex items-center gap-1">
                           <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                           <span>{item.telefono}</span>
+                          <Button
+                            onClick={() => {
+                              oncopy(item.telefono);
+                            }}
+                            variant="ghost"
+                          >
+                            <Copy />
+                          </Button>
                         </span>
                       ) : (
                         <span className="text-slate-400">---</span>
@@ -537,10 +625,14 @@ export const ClinicsPage: React.FC = () => {
                         {item.activo ? "Activa" : "Inactiva"}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-center">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                          >
                             <MoreVertical className="w-4 h-4" />
                           </Button>
                         </DropdownMenuTrigger>
@@ -548,14 +640,14 @@ export const ClinicsPage: React.FC = () => {
                           <DropdownMenuGroup>
                             <DropdownMenuItem
                               onClick={() => openDialogToEdit(item)}
-                              className="cursor-pointer dark:text-gray-800 hover:bg-gray-100 p-2 text-xs flex items-center"
+                              className="cursor-pointer dark:text-gray-800 hover:bg-gray-200 p-2 text-xs flex items-center"
                             >
                               <PencilIcon className="w-4 h-4 mr-2" />
                               <span>Editar</span>
                             </DropdownMenuItem>
 
                             <DropdownMenuItem
-                              className="cursor-pointer dark:text-gray-800 hover:bg-gray-100 p-2 text-xs flex items-center border-t border-slate-100"
+                              className="cursor-pointer dark:text-gray-800 hover:bg-gray-200 p-2 text-xs flex items-center border-t border-slate-100"
                               onClick={() => toggleClinicStatus(item)}
                             >
                               {item.activo ? (
@@ -572,7 +664,7 @@ export const ClinicsPage: React.FC = () => {
                             </DropdownMenuItem>
 
                             <DropdownMenuItem
-                              className="cursor-pointer dark:text-gray-800 hover:bg-gray-100 p-2 text-xs flex items-center text-red-600 border-t border-slate-100"
+                              className="cursor-pointer dark:text-gray-800 hover:bg-gray-200 p-2 text-xs flex items-center text-red-600 border-t border-slate-100"
                               onClick={() => {
                                 setItemToDelete(item);
                                 setConfirmationName("");

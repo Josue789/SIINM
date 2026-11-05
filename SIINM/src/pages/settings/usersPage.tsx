@@ -15,6 +15,9 @@ import {
   Hospital,
   Mail,
   Lock,
+  EyeIcon,
+  EyeOffIcon,
+  Copy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,8 +62,21 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group";
+import copy from "copy-to-clipboard";
+import { useForm } from "react-hook-form";
 
 export const UsersPage: React.FC = () => {
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<FormValues>();
   const { isOnline } = useNetwork();
   const [users, setUsers] = useState<PerfilUsuario[]>([]);
   const [clinicas, setClinicas] = useState<Clinica[]>([]);
@@ -72,18 +88,23 @@ export const UsersPage: React.FC = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [idAtEdit, setIdAtEdit] = useState<string | null>(null);
-  const [nombre, setNombre] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [rol, setRol] = useState<UserRole>("Personal");
-  const [clinicaId, setClinicaId] = useState<string>("");
+
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  interface FormValues {
+    nombre: string;
+    email: string;
+    contrasena?: string;
+    clinicaId?: string;
+    rol?: UserRole;
+  }
 
   // Estados del modal de confirmación de eliminación
   const [isDialogDelete, setIsDialogDelete] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<PerfilUsuario | null>(null);
   const [confirmationName, setConfirmationName] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
 
   // Cargar usuarios y clínicas
   const loadData = async () => {
@@ -118,72 +139,48 @@ export const UsersPage: React.FC = () => {
     };
   }, []);
 
-  // Limpiar campos del formulario
-  const resetForm = () => {
-    setIsEditing(false);
-    setIdAtEdit(null);
-    setNombre("");
-    setEmail("");
-    setPassword("");
-    setRol("Personal");
-    setClinicaId("");
-  };
-
   // Abrir diálogo para editar
   const openDialogToEdit = (user: PerfilUsuario) => {
     setIsEditing(true);
     setIdAtEdit(user.id);
-    setNombre(user.nombre);
-    setEmail(user.email);
-    setPassword("");
-    setRol(user.rol);
-    setClinicaId(user.clinica_id ? String(user.clinica_id) : "");
+    reset({
+      nombre: user.nombre,
+      email: user.email,
+      contrasena: "",
+      rol: user.rol,
+      clinicaId: user.clinica_id ? String(user.clinica_id) : "",
+    });
+
     setIsDialogOpen(true);
   };
 
   // Guardar (crear vía Edge Function o actualizar en Perfil_usuarios)
-  const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-
-    if (!nombre.trim()) {
-      toast.warn("El nombre es obligatorio");
-      return;
-    }
-    if (!email.trim()) {
-      toast.warn("El correo electrónico es obligatorio");
-      return;
-    }
-
-    if (!isEditing && (!password || password.length < 6)) {
-      toast.warn("La contraseña debe tener al menos 6 caracteres");
-      return;
-    }
-
+  const onSubmit = async (data: FormValues) => {
     try {
       setIsSubmitting(true);
-      const targetClinicaId = clinicaId ? Number(clinicaId) : null;
+      const targetClinicaId = data.clinicaId ? Number(data.clinicaId) : null;
 
       if (isEditing && idAtEdit) {
         await userRepository.update(idAtEdit, {
-          nombre: nombre.trim(),
-          email: email.trim(),
-          rol,
+          nombre: data.nombre.trim(),
+          email: data.email.trim(),
+          rol: data.rol,
           clinica_id: targetClinicaId,
         });
         toast.success("Usuario actualizado correctamente");
       } else {
         await userRepository.create({
-          nombre: nombre.trim(),
-          email: email.trim(),
-          password,
-          rol,
+          nombre: data.nombre.trim(),
+          email: data.email.trim(),
+          password: data.contrasena.trim(),
+          rol: data.rol,
           clinica_id: targetClinicaId,
         });
         toast.success("Usuario creado exitosamente con sus credenciales");
       }
 
       setIsDialogOpen(false);
-      resetForm();
+      reset();
       await loadData();
     } catch (err: unknown) {
       const msg =
@@ -274,6 +271,12 @@ export const UsersPage: React.FC = () => {
     }
   };
 
+  // Manejo de clipboard
+  const oncopy = (text: string) => {
+    copy(text);
+    toast("Elemento copiado al portapapeles");
+  };
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* Encabezado */}
@@ -328,7 +331,7 @@ export const UsersPage: React.FC = () => {
             open={isDialogOpen}
             onOpenChange={(open) => {
               setIsDialogOpen(open);
-              if (!open) resetForm();
+              if (!open) reset();
             }}
           >
             <DialogTrigger asChild>
@@ -338,7 +341,7 @@ export const UsersPage: React.FC = () => {
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-md">
-              <form onSubmit={onSubmit} className="space-y-4">
+              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                 <DialogHeader>
                   <DialogTitle>
                     {isEditing ? "Editar Usuario" : "Añadir Nuevo Usuario"}
@@ -357,40 +360,74 @@ export const UsersPage: React.FC = () => {
                     </label>
                     <Input
                       placeholder="Ej. Dr. Roberto Gómez"
-                      value={nombre}
-                      onChange={(e) => setNombre(e.target.value)}
-                      required
+                      {...register("nombre", {
+                        required: "El nombre es obligatorio",
+                      })}
+                      className={errors.nombre ? "border-red-700" : ""}
                     />
+                    <p className="text-red-500 font-semibold text-xs m-1">
+                      {errors.nombre?.message.toString()}
+                    </p>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 flex items-center gap-1.5">
                       <Mail className="w-3.5 h-3.5 text-slate-400" />
                       <span>Correo Electrónico *</span>
                     </label>
                     <Input
                       type="email"
                       placeholder="usuario@salud.gob.mx"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
+                      {...register("email", {
+                        required: "El email es requerido",
+                        pattern: {
+                          value: /^\S+@\S+\.\S+$/,
+                          message: "email Invalido",
+                        },
+                      })}
+                      className={errors.email ? "border-red-700" : ""}
                     />
+                    <p className="text-red-500 font-semibold text-xs m-1">
+                      {errors.email?.message.toString()}
+                    </p>
                   </div>
 
                   {!isEditing && (
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                      <label className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 flex items-center gap-1.5">
                         <Lock className="w-3.5 h-3.5 text-slate-400" />
                         <span>Contraseña Inicial * (mínimo 6 caracteres)</span>
                       </label>
-                      <Input
-                        type="password"
-                        placeholder="••••••••"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        required={!isEditing}
-                        minLength={6}
-                      />
+                      <InputGroup
+                        className={errors.contrasena ? "border-red-700" : ""}
+                      >
+                        <InputGroupInput
+                          type={isVisible ? "Text" : "password"}
+                          placeholder="••••••••"
+                          minLength={6}
+                          {...register("contrasena", {
+                            required: isEditing
+                              ? false
+                              : "La contraseña es obligatoria",
+                            minLength: {
+                              value: 8,
+                              message: "Longitud minima de 8",
+                            },
+                          })}
+                        />
+                        <InputGroupAddon align="inline-end">
+                          <Button
+                            variant="ghost"
+                            className="hover:bg-transparent"
+                            onClick={() => setIsVisible(!isVisible)}
+                          >
+                            {!isVisible ? <EyeIcon /> : <EyeOffIcon />}
+                          </Button>
+                        </InputGroupAddon>
+                      </InputGroup>
+                      <p className="text-red-500 text-xs font-semibold m-1">
+                        {errors.contrasena?.message.toString()}
+                      </p>
                     </div>
                   )}
 
@@ -400,26 +437,30 @@ export const UsersPage: React.FC = () => {
                         Rol en el Sistema *
                       </label>
                       <select
-                        value={rol}
-                        onChange={(e) => setRol(e.target.value as UserRole)}
                         className="w-full h-9 rounded-md border border-slate-200 bg-white px-3 py-1 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        required
+                        {...register("rol", {
+                          required: "El rol es obligatorio",
+                        })}
                       >
                         <option value="Personal">Personal</option>
                         <option value="encargado">Encargado</option>
                         <option value="admin">Administrador</option>
                       </select>
+                      <p className="text-red-500 text-xs font-semibold">
+                        {errors.rol?.message.toString()}
+                      </p>
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 flex items-center gap-1">
+                      <label className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 flex items-center gap-1">
                         <Hospital className="w-3.5 h-3.5 text-slate-400" />
                         <span>Clínica Asignada</span>
                       </label>
                       <select
-                        value={clinicaId}
-                        onChange={(e) => setClinicaId(e.target.value)}
-                        className="w-full h-9 rounded-md border border-slate-200 bg-white px-3 py-1 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        className={`w-full h-9 rounded-md border ${errors.clinicaId ? "border-red-700" : "border-slate-200"} bg-white px-3 py-1 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500`}
+                        {...register("clinicaId", {
+                          required: "La clinica es obligatoria",
+                        })}
                       >
                         <option value="">Sin asignar / Global</option>
                         {clinicas.map((c) => (
@@ -428,6 +469,9 @@ export const UsersPage: React.FC = () => {
                           </option>
                         ))}
                       </select>
+                      <p className="text-red-500 text-xs font-semibold m-1">
+                        {errors.clinicaId?.message.toString()}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -438,7 +482,7 @@ export const UsersPage: React.FC = () => {
                     variant="outline"
                     onClick={() => {
                       setIsDialogOpen(false);
-                      resetForm();
+                      reset();
                     }}
                     disabled={isSubmitting}
                   >
@@ -629,7 +673,17 @@ export const UsersPage: React.FC = () => {
                     </TableCell>
 
                     <TableCell className="text-xs font-mono text-slate-600">
-                      {item.email || "---"}
+                      <div className="flex flex-row items-center">
+                        <p> {item.email || "---"} </p>
+                        <Button
+                          variant="ghost"
+                          onClick={() => {
+                            oncopy(item.email);
+                          }}
+                        >
+                          <Copy />
+                        </Button>
+                      </div>
                     </TableCell>
 
                     <TableCell>{renderRoleBadge(item.rol)}</TableCell>
@@ -647,7 +701,7 @@ export const UsersPage: React.FC = () => {
                       )}
                     </TableCell>
 
-                    <TableCell className="text-right">
+                    <TableCell className="text-center">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button
@@ -662,14 +716,14 @@ export const UsersPage: React.FC = () => {
                           <DropdownMenuGroup>
                             <DropdownMenuItem
                               onClick={() => openDialogToEdit(item)}
-                              className="cursor-pointer dark:text-gray-800 hover:bg-gray-100 p-2 text-xs flex items-center"
+                              className="cursor-pointer dark:text-gray-800 hover:bg-gray-200 p-2 text-xs flex items-center"
                             >
                               <PencilIcon className="w-4 h-4 mr-2" />
                               <span>Editar</span>
                             </DropdownMenuItem>
 
                             <DropdownMenuItem
-                              className="cursor-pointer dark:text-gray-800 hover:bg-gray-100 p-2 text-xs flex items-center text-red-600 border-t border-slate-100"
+                              className="cursor-pointer dark:text-red-600 hover:bg-gray-200 p-2 text-xs flex items-center text-red-600"
                               onClick={() => {
                                 setItemToDelete(item);
                                 setConfirmationName("");
