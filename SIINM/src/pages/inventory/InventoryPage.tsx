@@ -26,6 +26,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TablePagination,
+  usePaginatedTable,
 } from "@/components/ui/table";
 import { toast } from "react-toastify";
 import {
@@ -234,6 +236,12 @@ export const InventoryPage: React.FC = () => {
     });
   }, [inventoryItems, searchQuery, filterMode, currentTimestamp]);
 
+  // Paginación con @tanstack/react-table (useTable)
+  const { table, paginatedData: paginatedMedicines } = usePaginatedTable(
+    filteredMedicines,
+    10,
+  );
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* Encabezado Principal */}
@@ -382,7 +390,7 @@ export const InventoryPage: React.FC = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredMedicines.map((m) => {
+              {paginatedMedicines.map((m) => {
                 const criticalExpiry = isExpiringSoon(
                   m.fecha_caducidad,
                   15,
@@ -441,6 +449,7 @@ export const InventoryPage: React.FC = () => {
               })}
             </TableBody>
           </Table>
+          <TablePagination table={table} />
         </Card>
       )}
       <AlertDialog open={confirmDelete}>

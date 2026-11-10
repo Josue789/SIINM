@@ -35,6 +35,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TablePagination,
+  usePaginatedTable,
 } from "@/components/ui/table";
 import { DropdownMenuItem } from "@radix-ui/react-dropdown-menu";
 import {
@@ -214,6 +216,12 @@ export const CatalogPage: React.FC = () => {
     }
     return matchesSearch;
   });
+
+  // Paginación con @tanstack/react-table (useTable)
+  const { table, paginatedData: paginatedItems } = usePaginatedTable(
+    filteredItems,
+    10,
+  );
 
   // Carga los valores a editar al dialogo y activa bandera de edicion
   const openDialogToEdit = (item: CatalogoMedicamento) => {
@@ -552,7 +560,7 @@ export const CatalogPage: React.FC = () => {
                 </TableCell>
               </TableRow>
             ) : (
-              filteredItems.map((item) => {
+              paginatedItems.map((item) => {
                 const isActivo =
                   typeof item.activo === "boolean"
                     ? item.activo
@@ -662,6 +670,9 @@ export const CatalogPage: React.FC = () => {
             )}
           </TableBody>
         </Table>
+        {!isLoading && filteredItems.length > 0 && (
+          <TablePagination table={table} />
+        )}
       </Card>
     </div>
   );

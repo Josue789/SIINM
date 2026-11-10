@@ -18,6 +18,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TablePagination,
+  usePaginatedTable,
 } from "@/components/ui/table";
 import type { Clinica, InventarioItem } from "@/types/inventory.types";
 import { inventarioRepository } from "@/db/repositories/inventario.repository";
@@ -101,6 +103,12 @@ export const SupervisionPage: React.FC = () => {
       .includes(item.id_clinica.toString());
     return searchMatch && clinicMatch;
   });
+
+  // Paginación con @tanstack/react-table (useTable)
+  const { table, paginatedData: paginatedData } = usePaginatedTable(
+    filteredData,
+    10,
+  );
 
   const saveChanges = async () => {
     setIsUpdating(true);
@@ -234,7 +242,7 @@ export const SupervisionPage: React.FC = () => {
                 </TableCell>
               </TableRow>
             ) : (
-              filteredData.map((item) => (
+              paginatedData.map((item) => (
                 <TableRow key={item.id} className="border-0">
                   <TableCell className="font-mono font-medium text-slate-700">
                     {item.clave_ssa}
@@ -338,6 +346,9 @@ export const SupervisionPage: React.FC = () => {
             )}
           </TableBody>
         </Table>
+        {!pageLoad && filteredData.length > 0 && (
+          <TablePagination table={table} />
+        )}
       </Card>
       {/* Diálogo para confirmar eliminacion */}
       <AlertDialog open={openDialog} onOpenChange={setOpenDialog}>

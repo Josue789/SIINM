@@ -38,6 +38,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TablePagination,
+  usePaginatedTable,
 } from "@/components/ui/table";
 import { DropdownMenuItem } from "@radix-ui/react-dropdown-menu";
 import {
@@ -202,7 +204,7 @@ export const ClinicsPage: React.FC = () => {
     }
   };
 
-  // Filtro y búsqueda reactiva
+  // Filtro, búsqueda de tabla de datos
   const filteredClinics = useMemo(() => {
     const term = search.toLowerCase().trim();
     return clinics.filter((item) => {
@@ -223,6 +225,12 @@ export const ClinicsPage: React.FC = () => {
       return matchesSearch;
     });
   }, [clinics, search, filter]);
+
+  // Paginación con @tanstack/react-table (useTable)
+  const { table, paginatedData: paginatedClinics } = usePaginatedTable(
+    filteredClinics,
+    10,
+  );
 
   //Manejo de clipboard
   const oncopy = (text: string) => {
@@ -550,7 +558,7 @@ export const ClinicsPage: React.FC = () => {
                 </TableCell>
               </TableRow>
             ) : (
-              filteredClinics.map((item) => {
+              paginatedClinics.map((item) => {
                 return (
                   <TableRow
                     key={item.id}
@@ -684,6 +692,9 @@ export const ClinicsPage: React.FC = () => {
             )}
           </TableBody>
         </Table>
+        {!loading && filteredClinics.length > 0 && (
+          <TablePagination table={table} />
+        )}
       </Card>
     </div>
   );

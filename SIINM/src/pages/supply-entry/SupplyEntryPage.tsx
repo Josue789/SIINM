@@ -430,7 +430,7 @@ export const SupplyEntryPage: React.FC = () => {
               <Input
                 type="text"
                 value={lotNumber}
-                onChange={(e) => setLotNumber(e.target.value)}
+                onChange={(e) => setLotNumber(e.target.value.toUpperCase())}
                 placeholder="Ej. AH224"
                 required
               />

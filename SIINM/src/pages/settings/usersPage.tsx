@@ -43,6 +43,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TablePagination,
+  usePaginatedTable,
 } from "@/components/ui/table";
 import { DropdownMenuItem } from "@radix-ui/react-dropdown-menu";
 import {
@@ -338,6 +340,12 @@ export const UsersPage: React.FC = () => {
       return matchesSearch;
     });
   }, [users, search, roleFilter]);
+
+  // Paginación con @tanstack/react-table (useTable)
+  const { table, paginatedData: paginatedUsers } = usePaginatedTable(
+    filteredUsers,
+    10,
+  );
 
   // Renderizar badge según rol
   const renderRoleBadge = (userRole: UserRole) => {
@@ -694,7 +702,7 @@ export const UsersPage: React.FC = () => {
               if (!open) setUserForPassword(null);
             }}
           >
-            <DialogContent className="max-w-md">
+            <DialogContent className="w-full">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
                   <KeyRound className="w-5 h-5 text-blue-600" />
@@ -708,7 +716,7 @@ export const UsersPage: React.FC = () => {
                 </DialogDescription>
               </DialogHeader>
 
-              <div className="space-y-4 py-2">
+              <div className="space-y-4 py-2 ">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                     Clave Temporal Generada (mín. 8 caracteres)
@@ -881,7 +889,7 @@ export const UsersPage: React.FC = () => {
                 </TableCell>
               </TableRow>
             ) : (
-              filteredUsers.map((item) => {
+              paginatedUsers.map((item) => {
                 const isUserActive = item.activo !== false;
                 return (
                   <TableRow
@@ -1015,6 +1023,9 @@ export const UsersPage: React.FC = () => {
             )}
           </TableBody>
         </Table>
+        {!loading && filteredUsers.length > 0 && (
+          <TablePagination table={table} />
+        )}
       </Card>
     </div>
   );

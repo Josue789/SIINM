@@ -1,5 +1,12 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { Trash2, Check, X, Search, Loader2 } from "lucide-react";
+import React, { useEffect, useId, useMemo, useState } from "react";
+import {
+  Trash2,
+  Check,
+  X,
+  Search,
+  Loader2,
+  PencilSparkles,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -201,6 +208,12 @@ export const PrescriptionsPage: React.FC = () => {
     loadData();
   }, [user?.clinicaId]);
 
+  // Genera un folio de receta unico
+  const folioGenerate = () => {
+    const date = Date.now();
+    const featureId = crypto.getRandomValues(new Uint8Array(1));
+    return date + featureId.toString();
+  };
   // Agrupar medicamentos únicos por Clave SSA o Nombre (una sola vez sin duplicados)
   const groupedMedications = useMemo<GroupedMedication[]>(() => {
     const groupsMap = new Map<string, GroupedMedication>();
@@ -449,12 +462,17 @@ export const PrescriptionsPage: React.FC = () => {
           <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
             Folio de Receta
           </label>
-          <Input
-            type="text"
-            value={recipeFolio}
-            onChange={(e) => setRecipeFolio(e.target.value)}
-            placeholder="Ingrese el número de folio de la receta"
-          />
+          <div className="flex gap-2">
+            <Input
+              type="text"
+              value={recipeFolio}
+              onChange={(e) => setRecipeFolio(e.target.value)}
+              placeholder="Ingrese el número de folio de la receta"
+            />
+            <Button onClick={() => setRecipeFolio(folioGenerate)}>
+              <PencilSparkles /> <p>Generar folio</p>
+            </Button>
+          </div>
         </div>
 
         <div>
