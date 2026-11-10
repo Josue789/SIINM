@@ -402,7 +402,10 @@ export const SupplyEntryPage: React.FC = () => {
                 type="number"
                 min="1"
                 value={quantityPerPiece}
-                onChange={(e) => setQuantityPerPiece(e.target.value)}
+                onChange={(e) => {
+                  if (Number(e.target.value) >= 0)
+                    setQuantityPerPiece(e.target.value);
+                }}
                 required
               />
             </div>

@@ -18,6 +18,8 @@ import {
   EyeIcon,
   EyeOffIcon,
   Copy,
+  KeyRound,
+  Send,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -106,6 +108,14 @@ export const UsersPage: React.FC = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
 
+  // Estados del modal de cambio de contraseña / clave temporal
+  const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
+  const [userForPassword, setUserForPassword] = useState<PerfilUsuario | null>(
+    null,
+  );
+  const [tempPassword, setTempPassword] = useState("");
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+
   // Cargar usuarios y clínicas
   const loadData = async () => {
     try {
@@ -172,15 +182,23 @@ export const UsersPage: React.FC = () => {
         await userRepository.create({
           nombre: data.nombre.trim(),
           email: data.email.trim(),
-          password: data.contrasena.trim(),
-          rol: data.rol,
+          password: (data.contrasena || "").trim(),
+          rol: data.rol || "Personal",
           clinica_id: targetClinicaId,
         });
         toast.success("Usuario creado exitosamente con sus credenciales");
       }
 
       setIsDialogOpen(false);
-      reset();
+      setIsEditing(false);
+      setIdAtEdit(null);
+      reset({
+        nombre: "",
+        email: "",
+        contrasena: "",
+        rol: "Personal",
+        clinicaId: "",
+      });
       await loadData();
     } catch (err: unknown) {
       const msg =
@@ -208,6 +226,93 @@ export const UsersPage: React.FC = () => {
       toast.error(msg);
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  // Activar o desactivar usuario en Supabase
+  const toggleUserStatus = async (targetUser: PerfilUsuario) => {
+    const newStatus = targetUser.activo === false ? true : false;
+    try {
+      await userRepository.updateStatus(
+        targetUser.id,
+        newStatus,
+        targetUser.email,
+      );
+      toast.success(
+        newStatus
+          ? `Usuario "${targetUser.nombre}" activado`
+          : `Usuario "${targetUser.nombre}" desactivado`,
+      );
+      await loadData();
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Error al cambiar estatus del usuario";
+      toast.error(msg);
+    }
+  };
+
+  // Abrir modal de contraseña con clave temporal generada
+  const openPasswordDialog = (targetUser: PerfilUsuario) => {
+    setUserForPassword(targetUser);
+    setTempPassword(userRepository.generateTemporaryPassword());
+    setIsPasswordDialogOpen(true);
+  };
+
+  const regenerateTempPassword = () => {
+    setTempPassword(userRepository.generateTemporaryPassword());
+  };
+
+  // Procesar envío de correo de restablecimiento y/o clave temporal con Supabase
+  const handlePasswordReset = async (applyTempPassword: boolean) => {
+    if (!userForPassword) return;
+    if (!userForPassword.email) {
+      toast.error("El usuario no cuenta con un correo electrónico registrado");
+      return;
+    }
+    if (applyTempPassword && tempPassword.trim().length < 8) {
+      toast.error("La clave temporal debe tener al menos 8 caracteres");
+      return;
+    }
+
+    try {
+      setIsResettingPassword(true);
+      const { emailSent, passwordUpdatedRemotely } =
+        await userRepository.resetPasswordWithSupabase({
+          userId: userForPassword.id,
+          email: userForPassword.email,
+          tempPassword: applyTempPassword ? tempPassword.trim() : undefined,
+          sendEmail: true,
+        });
+
+      if (applyTempPassword) {
+        copy(tempPassword.trim());
+        if (passwordUpdatedRemotely && emailSent) {
+          toast.success(
+            "Clave temporal aplicada, copiada al portapapeles y correo de cambio enviado por Supabase",
+          );
+        } else {
+          toast.success(
+            "Clave temporal copiada al portapapeles y correo de cambio de contraseña enviado por Supabase",
+          );
+        }
+      } else if (emailSent) {
+        toast.success(
+          `Correo de cambio de contraseña enviado a ${userForPassword.email}`,
+        );
+      }
+
+      setIsPasswordDialogOpen(false);
+      setUserForPassword(null);
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Error al solicitar el cambio de contraseña en Supabase";
+      toast.error(msg);
+    } finally {
+      setIsResettingPassword(false);
     }
   };
 
@@ -331,11 +436,34 @@ export const UsersPage: React.FC = () => {
             open={isDialogOpen}
             onOpenChange={(open) => {
               setIsDialogOpen(open);
-              if (!open) reset();
+              if (!open) {
+                setIsEditing(false);
+                setIdAtEdit(null);
+                reset({
+                  nombre: "",
+                  email: "",
+                  contrasena: "",
+                  rol: "Personal",
+                  clinicaId: "",
+                });
+              }
             }}
           >
             <DialogTrigger asChild>
-              <Button className="shrink-0 self-start sm:self-auto gap-2">
+              <Button
+                className="shrink-0 self-start sm:self-auto gap-2"
+                onClick={() => {
+                  setIsEditing(false);
+                  setIdAtEdit(null);
+                  reset({
+                    nombre: "",
+                    email: "",
+                    contrasena: "",
+                    rol: "Personal",
+                    clinicaId: "",
+                  });
+                }}
+              >
                 <Plus className="w-4 h-4" />
                 <span>Añadir Usuario</span>
               </Button>
@@ -366,7 +494,7 @@ export const UsersPage: React.FC = () => {
                       className={errors.nombre ? "border-red-700" : ""}
                     />
                     <p className="text-red-500 font-semibold text-xs m-1">
-                      {errors.nombre?.message.toString()}
+                      {errors.nombre?.message?.toString()}
                     </p>
                   </div>
 
@@ -388,7 +516,7 @@ export const UsersPage: React.FC = () => {
                       className={errors.email ? "border-red-700" : ""}
                     />
                     <p className="text-red-500 font-semibold text-xs m-1">
-                      {errors.email?.message.toString()}
+                      {errors.email?.message?.toString()}
                     </p>
                   </div>
 
@@ -417,6 +545,7 @@ export const UsersPage: React.FC = () => {
                         />
                         <InputGroupAddon align="inline-end">
                           <Button
+                            type="button"
                             variant="ghost"
                             className="hover:bg-transparent"
                             onClick={() => setIsVisible(!isVisible)}
@@ -426,7 +555,7 @@ export const UsersPage: React.FC = () => {
                         </InputGroupAddon>
                       </InputGroup>
                       <p className="text-red-500 text-xs font-semibold m-1">
-                        {errors.contrasena?.message.toString()}
+                        {errors.contrasena?.message?.toString()}
                       </p>
                     </div>
                   )}
@@ -447,7 +576,7 @@ export const UsersPage: React.FC = () => {
                         <option value="admin">Administrador</option>
                       </select>
                       <p className="text-red-500 text-xs font-semibold">
-                        {errors.rol?.message.toString()}
+                        {errors.rol?.message?.toString()}
                       </p>
                     </div>
 
@@ -470,7 +599,7 @@ export const UsersPage: React.FC = () => {
                         ))}
                       </select>
                       <p className="text-red-500 text-xs font-semibold m-1">
-                        {errors.clinicaId?.message.toString()}
+                        {errors.clinicaId?.message?.toString()}
                       </p>
                     </div>
                   </div>
@@ -556,6 +685,107 @@ export const UsersPage: React.FC = () => {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+
+          {/* Diálogo de cambio de contraseña / clave temporal con Supabase */}
+          <Dialog
+            open={isPasswordDialogOpen}
+            onOpenChange={(open) => {
+              setIsPasswordDialogOpen(open);
+              if (!open) setUserForPassword(null);
+            }}
+          >
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <KeyRound className="w-5 h-5 text-blue-600" />
+                  <span>Cambiar / Restablecer Contraseña</span>
+                </DialogTitle>
+                <DialogDescription>
+                  Genera una clave temporal y envía el correo de recuperación de
+                  contraseña mediante Supabase Auth para{" "}
+                  <strong>{userForPassword?.nombre}</strong> (
+                  {userForPassword?.email}).
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4 py-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Clave Temporal Generada (mín. 8 caracteres)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="text"
+                      value={tempPassword}
+                      onChange={(e) => setTempPassword(e.target.value)}
+                      className="font-mono text-sm font-bold tracking-wider"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={regenerateTempPassword}
+                      title="Generar otra clave temporal"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => oncopy(tempPassword)}
+                      title="Copiar clave temporal"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1.5">
+                    Al enviar, Supabase mandará un enlace al correo{" "}
+                    <strong>{userForPassword?.email}</strong> para que el
+                    usuario establezca su contraseña (y la clave temporal se
+                    copiará a tu portapapeles).
+                  </p>
+                </div>
+              </div>
+
+              <DialogFooter className="flex flex-col sm:flex-row gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setIsPasswordDialogOpen(false);
+                    setUserForPassword(null);
+                  }}
+                  disabled={isResettingPassword}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => handlePasswordReset(false)}
+                  disabled={isResettingPassword}
+                  className="gap-1.5"
+                >
+                  <Mail className="w-3.5 h-3.5" />
+                  <span>Solo enviar correo</span>
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => handlePasswordReset(true)}
+                  disabled={isResettingPassword}
+                  className="gap-1.5"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>
+                    {isResettingPassword
+                      ? "Enviando..."
+                      : "Generar clave y enviar correo"}
+                  </span>
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
@@ -618,6 +848,7 @@ export const UsersPage: React.FC = () => {
               </TableHead>
               <TableHead className="text-gray-800">Rol</TableHead>
               <TableHead className="text-gray-800">Clínica Asignada</TableHead>
+              <TableHead className="text-gray-800">Estatus</TableHead>
               <TableHead className="text-right">Operaciones</TableHead>
             </TableRow>
           </TableHeader>
@@ -625,7 +856,7 @@ export const UsersPage: React.FC = () => {
             {loading ? (
               <TableRow>
                 <TableCell
-                  colSpan={5}
+                  colSpan={6}
                   className="h-36 text-center text-slate-500 py-8"
                 >
                   <RefreshCw className="w-6 h-6 animate-spin mx-auto text-blue-500 mb-2" />
@@ -637,7 +868,7 @@ export const UsersPage: React.FC = () => {
             ) : filteredUsers.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={5}
+                  colSpan={6}
                   className="h-36 text-center text-slate-500 py-8"
                 >
                   <p className="font-semibold text-sm text-slate-700 mb-1">
@@ -651,10 +882,13 @@ export const UsersPage: React.FC = () => {
               </TableRow>
             ) : (
               filteredUsers.map((item) => {
+                const isUserActive = item.activo !== false;
                 return (
                   <TableRow
                     key={item.id}
-                    className="border-0 hover:bg-slate-50/70 transition-colors"
+                    className={`border-0 hover:bg-slate-50/70 transition-colors ${
+                      !isUserActive ? "opacity-65 bg-slate-50/40" : ""
+                    }`}
                   >
                     <TableCell>
                       <div className="flex items-center gap-2.5">
@@ -701,6 +935,19 @@ export const UsersPage: React.FC = () => {
                       )}
                     </TableCell>
 
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={
+                          isUserActive
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                            : "border-red-200 bg-red-50 text-red-700"
+                        }
+                      >
+                        {isUserActive ? "Activo" : "Inactivo"}
+                      </Badge>
+                    </TableCell>
+
                     <TableCell className="text-center">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -723,7 +970,32 @@ export const UsersPage: React.FC = () => {
                             </DropdownMenuItem>
 
                             <DropdownMenuItem
-                              className="cursor-pointer dark:text-red-600 hover:bg-gray-200 p-2 text-xs flex items-center text-red-600"
+                              onClick={() => openPasswordDialog(item)}
+                              className="cursor-pointer dark:text-gray-800 hover:bg-gray-200 p-2 text-xs flex items-center border-t border-slate-100"
+                            >
+                              <KeyRound className="w-4 h-4 mr-2 text-blue-600" />
+                              <span>Cambiar contraseña</span>
+                            </DropdownMenuItem>
+
+                            <DropdownMenuItem
+                              onClick={() => toggleUserStatus(item)}
+                              className="cursor-pointer dark:text-gray-800 hover:bg-gray-200 p-2 text-xs flex items-center border-t border-slate-100"
+                            >
+                              {isUserActive ? (
+                                <div className="flex items-center text-amber-600">
+                                  <EyeOffIcon className="w-4 h-4 mr-2" />
+                                  <span>Desactivar</span>
+                                </div>
+                              ) : (
+                                <div className="flex items-center text-emerald-600">
+                                  <EyeIcon className="w-4 h-4 mr-2" />
+                                  <span>Activar</span>
+                                </div>
+                              )}
+                            </DropdownMenuItem>
+
+                            <DropdownMenuItem
+                              className="cursor-pointer dark:text-red-600 hover:bg-gray-200 p-2 text-xs flex items-center text-red-600 border-t border-slate-100"
                               onClick={() => {
                                 setItemToDelete(item);
                                 setConfirmationName("");

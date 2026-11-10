@@ -1,4 +1,5 @@
 import { supabase } from '@/services/supabase/client'
+import { saveCachedClinicas } from '@/services/supabase/auth.service'
 import type { Clinica } from '@/types/inventory.types'
 
 export type CreateClinicaDTO = {
@@ -37,7 +38,9 @@ export const clinicaRepository = {
       throw new Error(`Error al obtener clínicas: ${error.message}`)
     }
 
-    return (data as Clinica[]) || []
+    const list = (data as Clinica[]) || []
+    saveCachedClinicas(list)
+    return list
   },
 
   /**
@@ -55,6 +58,9 @@ export const clinicaRepository = {
       throw new Error(`Error al obtener clínica: ${error.message}`)
     }
 
+    if (data) {
+      saveCachedClinicas([data as Clinica])
+    }
     return data as Clinica | null
   },
 

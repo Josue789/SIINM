@@ -9,6 +9,17 @@ import React, {
 import type { User, AuthSession, AuthState } from "../types/auth.types";
 import { authService } from "../services/supabase/auth.service";
 import { supabase } from "../services/supabase/client";
+import { toast } from "react-toastify";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog";
+import { Input } from "../components/ui/input";
+import { Button } from "../components/ui/button";
 
 interface AuthContextType extends AuthState {
   login: (
@@ -36,6 +47,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<AuthSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRecoveryOpen, setIsRecoveryOpen] = useState(() =>
+    typeof window !== "undefined" &&
+    window.location.hash.includes("type=recovery"),
+  );
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -62,25 +80,49 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     // 2. Suscribirse a los cambios de autenticación de Supabase en tiempo real
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, sbSession) => {
+    } = supabase.auth.onAuthStateChange((event, sbSession) => {
       if (!isMounted) return;
-      if (sbSession) {
-        // Obtenemos el perfil directamente de la tabla Perfil_usuarios
-        const profile = await authService.getUserProfile(sbSession.user.id);
+      if (event === "PASSWORD_RECOVERY") {
+        setIsRecoveryOpen(true);
+      }
+      if (!sbSession) {
+        setUser(null);
+        setSession(null);
+        setIsLoading(false);
+        return;
+      }
+
+      // Ejecutar fuera del lock síncrono de GoTrueClient para evitar bloqueo en getSession()
+      setTimeout(async () => {
+        if (!isMounted) return;
+        const profile = await authService.getUserProfile(
+          sbSession.user.id,
+          sbSession.user.email,
+          sbSession.user.user_metadata,
+        );
         if (!isMounted) return;
 
         const u = authService.buildUser(sbSession.user, profile);
+        if (u.activo === false) {
+          await authService.signOut();
+          if (!isMounted) return;
+          setUser(null);
+          setSession(null);
+          setIsLoading(false);
+          toast.error(
+            "Esta cuenta se encuentra desactivada. Contacta al administrador.",
+          );
+          return;
+        }
+
         setUser(u);
         setSession({
           user: u,
           token: sbSession.access_token,
           expiresAt: sbSession.expires_at,
         });
-      } else {
-        setUser(null);
-        setSession(null);
-      }
-      setIsLoading(false);
+        setIsLoading(false);
+      }, 0);
     });
 
     return () => {
@@ -183,14 +225,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
    * Recarga el perfil del usuario autenticado desde la tabla Perfil_usuarios.
    */
   const refreshProfile = useCallback(async () => {
-    if (!user) return;
-    const profile = await authService.getUserProfile(user.id);
+    const { data } = await supabase.auth.getSession();
+    const sbUser = data.session?.user;
+    const targetId = sbUser?.id || user?.id;
+    const targetEmail = sbUser?.email || user?.email;
+
+    if (!targetId) return;
+
+    const profile = await authService.getUserProfile(
+      targetId,
+      targetEmail,
+      sbUser?.user_metadata,
+    );
     if (profile) {
-      const updatedUser = authService.buildUser(user, profile);
-      setUser(updatedUser);
-      setSession((prev) => (prev ? { ...prev, user: updatedUser } : null));
+      setUser((prev) => {
+        const base = sbUser || prev || { id: targetId, email: targetEmail || "" };
+        const updatedUser = authService.buildUser(base, profile);
+        if (
+          prev &&
+          prev.id === updatedUser.id &&
+          prev.email === updatedUser.email &&
+          prev.fullName === updatedUser.fullName &&
+          prev.role === updatedUser.role &&
+          prev.clinicaId === updatedUser.clinicaId &&
+          prev.clinicaNombre === updatedUser.clinicaNombre
+        ) {
+          return prev;
+        }
+        return updatedUser;
+      });
+      setSession((prev) => {
+        if (!prev) return null;
+        const base = sbUser || prev.user;
+        const updatedUser = authService.buildUser(base, profile);
+        return { ...prev, user: updatedUser };
+      });
     }
-  }, [user]);
+  }, [user?.id, user?.email]);
 
   const value = useMemo(
     () => ({
@@ -206,7 +277,91 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     [user, session, isLoading, refreshProfile],
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  const handlePasswordRecoverySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword.trim().length < 8) {
+      toast.error("La nueva contraseña debe tener al menos 8 caracteres");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error("Las contraseñas no coinciden");
+      return;
+    }
+
+    setIsUpdatingPassword(true);
+    const { error } = await authService.updateOwnPassword(newPassword.trim());
+    setIsUpdatingPassword(false);
+
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
+    toast.success("Contraseña actualizada exitosamente");
+    setIsRecoveryOpen(false);
+    setNewPassword("");
+    setConfirmPassword("");
+  };
+
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+      <Dialog open={isRecoveryOpen} onOpenChange={setIsRecoveryOpen}>
+        <DialogContent className="max-w-md">
+          <form onSubmit={handlePasswordRecoverySubmit} className="space-y-4">
+            <DialogHeader>
+              <DialogTitle>Establecer Nueva Contraseña</DialogTitle>
+              <DialogDescription>
+                Ingresa tu nueva contraseña (o la clave temporal proporcionada)
+                para actualizar tu cuenta en Supabase.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Nueva Contraseña * (mínimo 8 caracteres)
+                </label>
+                <Input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="••••••••"
+                  minLength={8}
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Confirmar Contraseña *
+                </label>
+                <Input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="••••••••"
+                  minLength={8}
+                  required
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsRecoveryOpen(false)}
+                disabled={isUpdatingPassword}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={isUpdatingPassword}>
+                {isUpdatingPassword ? "Actualizando..." : "Guardar Contraseña"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </AuthContext.Provider>
+  );
 };
 
 // eslint-disable-next-line react-refresh/only-export-components

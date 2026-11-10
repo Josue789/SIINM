@@ -1,14 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import {
-  LogIn,
-  Key,
-  Mail,
-  AlertCircle,
-  CheckCircle2,
-  Eye,
-  EyeOff,
-} from "lucide-react";
+import { LogIn, Key, Mail, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "../../context/AuthContext";
 import { ROUTES } from "../../router/routes";
@@ -18,14 +10,23 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group";
 import { Field, FieldLabel } from "@/components/ui/field";
+import { useForm } from "react-hook-form";
+import { toast } from "react-toastify";
 
 export const LoginPage: React.FC = () => {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  interface formValues {
+    email: string;
+    password: string;
+  }
+  const {
+    register,
+    reset,
+    handleSubmit,
+    formState: { errors },
+  } = useForm();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
+  const [tries, setTries] = useState(0);
 
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -36,19 +37,26 @@ export const LoginPage: React.FC = () => {
     (location.state as { from?: { pathname: string } })?.from?.pathname ||
     ROUTES.MASTER_CATALOG;
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setSuccessMessage(null);
+  const onSubmit = async (credentials: formValues) => {
+    if (tries >= 5) {
+      return toast.error("Demasiado intentos fallidos, intentalo mas tarde");
+    }
     setIsSubmitting(true);
 
-    const result = await login(email, password);
+    const result = await login(credentials.email, credentials.password);
     setIsSubmitting(false);
 
     if (result.success) {
+      reset();
+      setTries(0);
       navigate(destination, { replace: true });
+    } else if (result.error?.includes("desactivada")) {
+      toast.error(result.error);
+    } else if (result.error?.includes("rate limit")) {
+      toast.error("Demasiados intentos fallidos, intentalo mas tarde");
     } else {
-      setError(result.error || "Credenciales incorrectas");
+      setTries((prev) => prev + 1);
+      toast.error("Las credenciales son incorrectas");
     }
   };
 
@@ -60,60 +68,47 @@ export const LoginPage: React.FC = () => {
         </h2>
         <p className="text-xs text-slate-500">Ingresa con tus credenciales</p>
       </div>
-
-      {error && (
-        <div className="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 flex items-start gap-2 text-xs text-rose-700">
-          <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
-          <span>{error}</span>
-        </div>
-      )}
-
-      {successMessage && (
-        <div className="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 flex items-start gap-2 text-xs text-emerald-700">
-          <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 mt-0.5" />
-          <span>{successMessage}</span>
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div>
           <Field>
             <FieldLabel htmlFor="input-group-email">
               Correo Electrónico
             </FieldLabel>
-            <InputGroup>
+            <InputGroup className={errors.email ? "border-red-500" : ""}>
               <InputGroupInput
                 id="input-group-email"
                 type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
                 className="pl-9"
                 placeholder="usuario@ejemplo.com"
+                {...register("email", {
+                  required: "El correo es obligatorio",
+                })}
               />
               <InputGroupAddon>
-                <Mail />
+                <Mail className={errors.email ? "text-red-500" : ""} />
               </InputGroupAddon>
             </InputGroup>
           </Field>
+          <span className="text-red-700 text-xs font-semibold m-1">
+            {errors.email?.message.toString()}
+          </span>
         </div>
 
         <div>
           <Field>
             <FieldLabel htmlFor="input-group-password">Contraseña</FieldLabel>
-            <InputGroup>
+            <InputGroup className={errors.email ? "border-red-500" : ""}>
               <InputGroupInput
                 id="input-group-password"
                 type={isVisible ? "text" : "password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={6}
                 className="pl-9"
                 placeholder="Ingresa tu contraseña"
+                {...register("password", {
+                  required: "La contraseña es obligatoria",
+                })}
               />
               <InputGroupAddon>
-                <Key />
+                <Key className={errors.email ? "text-red-500" : ""} />
               </InputGroupAddon>
               <InputGroupAddon align="inline-end">
                 <Button
@@ -127,6 +122,9 @@ export const LoginPage: React.FC = () => {
               </InputGroupAddon>
             </InputGroup>
           </Field>
+          <span className="text-red-700 text-xs font-semibold m-1">
+            {errors.password?.message.toString()}
+          </span>
         </div>
 
         <Button

@@ -7,6 +7,7 @@ export interface User {
   role?: UserRole
   clinicaId?: number | null
   clinicaNombre?: string
+  activo?: boolean
 }
 
 export interface PerfilUsuario {
@@ -15,6 +16,7 @@ export interface PerfilUsuario {
   nombre: string
   rol: UserRole
   clinica_id?: number | null
+  activo?: boolean
   created_at?: string
   clinica?: {
     id: number

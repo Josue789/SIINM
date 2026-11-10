@@ -588,7 +588,11 @@ export const PrescriptionsPage: React.FC = () => {
           <Button
             type="button"
             variant="destructive"
-            onClick={() => setAddedItems([])}
+            onClick={() => {
+              setAddedItems([]);
+              setRecipeFolio("");
+              toast.info("Surtimiento cancelado");
+            }}
             className="flex-1 sm:flex-none gap-1.5"
           >
             <X className="w-4 h-4" />
@@ -613,7 +617,7 @@ export const PrescriptionsPage: React.FC = () => {
 
       {/* Dialog confirmacion de entrega de medicamento */}
       <Dialog open={isConfirmOpen} onOpenChange={setIsConfirmOpen}>
-        <DialogContent className="w-full max-w-4xl sm:min-w-[48rem] sm:max-h-[40rem] min-h-[60vh] max-h-[80vh]">
+        <DialogContent className="w-full max-w-4xl sm:min-w-3xl sm:max-h-160 min-h-[60vh] max-h-[80vh]">
           <DialogHeader>
             <DialogTitle>Confirmar entrega</DialogTitle>
             <DialogDescription className="py-4 text-sm font-semibold">
@@ -621,7 +625,7 @@ export const PrescriptionsPage: React.FC = () => {
               cada medicamento
             </DialogDescription>
           </DialogHeader>
-          <ScrollArea className="max-h-[35rem]">
+          <ScrollArea className="max-h-140">
             {addedItems.map((item) => (
               <Card
                 key={item.id}
@@ -665,7 +669,7 @@ export const PrescriptionsPage: React.FC = () => {
 
       {/* Dialog de búsqueda de medicamentos sin duplicados */}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="w-full max-w-4xl sm:min-w-[48rem] sm:max-h-[40rem] min-h-[60vh] max-h-[80vh]">
+        <DialogContent className="w-full max-w-4xl sm:min-w-3xl sm:max-h-160 min-h-[60vh] max-h-[80vh]">
           <DialogTitle>Lista de medicamentos</DialogTitle>
           <DialogDescription>
             Busca el medicamento por nombre, clave SSA o código de barras

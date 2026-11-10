@@ -248,10 +248,13 @@ export const SupervisionPage: React.FC = () => {
                   <TableCell className="font-bold">
                     <Badge
                       variant={
-                        new Date(item.fecha_caducidad) >
-                        new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-                          ? "default"
-                          : "destructive"
+                        new Date(item.fecha_caducidad) <=
+                        new Date(Date.now() + 90 * 24 * 60 * 60 * 1000)
+                          ? "destructive"
+                          : new Date(item.fecha_caducidad) <=
+                              new Date(Date.now() + 180 * 24 * 60 * 60 * 1000)
+                            ? "warning"
+                            : "default"
                       }
                     >
                       {item.fecha_caducidad}

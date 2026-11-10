@@ -39,7 +39,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-type FilterMode = "todos" | "caducan" | "diez_dias";
+type FilterMode = "todos" | "caducan" | "tres_meses";
 
 export interface DisplayInventoryItem {
   id: string | number;
@@ -226,7 +226,7 @@ export const InventoryPage: React.FC = () => {
       if (filterMode === "caducan") {
         return isExpiringSoon(m.fecha_caducidad, 30, currentTimestamp);
       }
-      if (filterMode === "diez_dias") {
+      if (filterMode === "tres_meses") {
         return isExpiringSoon(m.fecha_caducidad, 10, currentTimestamp);
       }
 
@@ -322,8 +322,8 @@ export const InventoryPage: React.FC = () => {
           </Button>
           <Button
             size="sm"
-            variant={filterMode === "diez_dias" ? "default" : "secondary"}
-            onClick={() => setFilterMode("diez_dias")}
+            variant={filterMode === "tres_meses" ? "default" : "secondary"}
+            onClick={() => setFilterMode("tres_meses")}
           >
             Urgentes (&lt;10 días)
           </Button>

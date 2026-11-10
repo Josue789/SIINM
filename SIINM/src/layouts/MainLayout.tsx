@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import {
   ClipboardList,
@@ -20,12 +20,25 @@ import { useAuth } from "../context/AuthContext";
 import { useNetwork } from "../context/NetworkContext";
 import { ROUTES } from "../router/routes";
 import { NetworkStatusBadge } from "../components/common/NetworkStatusBadge";
+import { userRepository } from "../db/repositories/user.repository";
+import { clinicaRepository } from "../db/repositories/clinica.repository";
 
 export const MainLayout: React.FC = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, refreshProfile } = useAuth();
   const { isOnline, isSyncing, triggerSync } = useNetwork();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    refreshProfile();
+
+    // Si es admin y hay conexión, sincronizar caché local de perfiles y clínicas
+    if (user.role === "admin" && isOnline) {
+      userRepository.getAll().catch(() => null);
+      clinicaRepository.getAll().catch(() => null);
+    }
+  }, [user?.id, user?.role, isOnline, refreshProfile]);
 
   const handleLogout = async () => {
     await logout();
@@ -246,7 +259,11 @@ export const MainLayout: React.FC = () => {
                 {user?.fullName || user?.email || "Usuario"}
               </p>
               <p className="text-[10px] text-slate-500 font-medium truncate m-0 leading-tight uppercase">
-                {user?.role || "Farmacéutico"} | {user?.clinicaNombre}
+                {user?.role || "Personal"} |{" "}
+                {user?.clinicaNombre ||
+                  (user?.clinicaId
+                    ? `Clínica #${user.clinicaId}`
+                    : "Sin clínica")}
               </p>
             </div>
             <button
