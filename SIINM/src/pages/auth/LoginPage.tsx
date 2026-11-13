@@ -1,8 +1,10 @@
 import React, { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { LogIn, Key, Mail, Eye, EyeOff } from "lucide-react";
+import { LogIn, Key, Mail, Eye, EyeOff, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "../../context/AuthContext";
+import { useNetwork } from "../../context/NetworkContext";
+import { OFFLINE_AUTH_TTL_DAYS } from "../../services/supabase/auth.service";
 import { ROUTES } from "../../router/routes";
 import {
   InputGroup,
@@ -13,22 +15,24 @@ import { Field, FieldLabel } from "@/components/ui/field";
 import { useForm } from "react-hook-form";
 import { toast } from "react-toastify";
 
+interface FormValues {
+  email: string;
+  password: string;
+}
+
 export const LoginPage: React.FC = () => {
-  interface formValues {
-    email: string;
-    password: string;
-  }
   const {
     register,
     reset,
     handleSubmit,
     formState: { errors },
-  } = useForm();
+  } = useForm<FormValues>();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const [tries, setTries] = useState(0);
 
   const { login } = useAuth();
+  const { isOnline } = useNetwork();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -37,7 +41,7 @@ export const LoginPage: React.FC = () => {
     (location.state as { from?: { pathname: string } })?.from?.pathname ||
     ROUTES.MASTER_CATALOG;
 
-  const onSubmit = async (credentials: formValues) => {
+  const onSubmit = async (credentials: FormValues) => {
     if (tries >= 5) {
       return toast.error("Demasiado intentos fallidos, intentalo mas tarde");
     }
@@ -49,8 +53,16 @@ export const LoginPage: React.FC = () => {
     if (result.success) {
       reset();
       setTries(0);
+      if (!isOnline) {
+        toast.info("Sesión iniciada en modo sin conexión (Offline).");
+      }
       navigate(destination, { replace: true });
-    } else if (result.error?.includes("desactivada")) {
+    } else if (
+      result.error?.includes("desactivada") ||
+      result.error?.includes("primer inicio de sesión") ||
+      result.error?.includes("expiró") ||
+      result.error?.includes("alterados")
+    ) {
       toast.error(result.error);
     } else if (result.error?.includes("rate limit")) {
       toast.error("Demasiados intentos fallidos, intentalo mas tarde");
@@ -68,6 +80,19 @@ export const LoginPage: React.FC = () => {
         </h2>
         <p className="text-xs text-slate-500">Ingresa con tus credenciales</p>
       </div>
+
+      {!isOnline && (
+        <div className="mb-4 p-3 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-2.5 text-amber-800">
+          <WifiOff className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+          <div className="text-[11px] leading-snug">
+            <p className="font-bold m-0">Modo sin conexión detectado</p>
+            <p className="text-amber-700 mt-0.5 m-0">
+              Puedes ingresar si ya habías iniciado sesión en línea en este dispositivo durante los últimos {OFFLINE_AUTH_TTL_DAYS} días.
+            </p>
+          </div>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div>
           <Field>
@@ -90,7 +115,7 @@ export const LoginPage: React.FC = () => {
             </InputGroup>
           </Field>
           <span className="text-red-700 text-xs font-semibold m-1">
-            {errors.email?.message.toString()}
+            {errors.email?.message?.toString()}
           </span>
         </div>
 
@@ -123,7 +148,7 @@ export const LoginPage: React.FC = () => {
             </InputGroup>
           </Field>
           <span className="text-red-700 text-xs font-semibold m-1">
-            {errors.password?.message.toString()}
+            {errors.password?.message?.toString()}
           </span>
         </div>
 

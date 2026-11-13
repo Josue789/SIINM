@@ -4,6 +4,202 @@ import type { User, AuthSession, PerfilUsuario, UserRole } from '../../types/aut
 const CACHED_PROFILES_KEY = 'siinm_cached_profiles'
 const CACHED_CLINICAS_KEY = 'siinm_cached_clinicas'
 const CACHED_USER_STATUS_KEY = 'siinm_user_active_status'
+const OFFLINE_AUTH_RECORDS_KEY = 'siinm_offline_auth_records_v1'
+const ACTIVE_OFFLINE_SESSION_KEY = 'siinm_active_offline_session_v1'
+const OFFLINE_INTEGRITY_SECRET = 'SIINM_OFFLINE_AUTH_INTEGRITY_2026_V1'
+
+/**
+ * Tiempo de vigencia para permitir inicio de sesión offline antes de obligar
+ * a una revalidación en línea (7 días).
+ */
+export const OFFLINE_AUTH_TTL_DAYS = 7
+export const OFFLINE_AUTH_TTL_MS = OFFLINE_AUTH_TTL_DAYS * 24 * 60 * 60 * 1000
+
+export interface OfflineAuthRecord {
+  email: string
+  user: User
+  salt: string
+  credentialHash: string
+  verifiedOnlineAt: number
+  offlineExpiresAt: number
+  integritySignature: string
+}
+
+async function sha256Hex(input: string): Promise<string> {
+  const encoder = new TextEncoder()
+  const data = encoder.encode(input)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+  const hashArray = Array.from(new Uint8Array(hashBuffer))
+  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+function generateSalt(): string {
+  const bytes = new Uint8Array(16)
+  crypto.getRandomValues(bytes)
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+}
+
+async function computeCredentialHash(
+  email: string,
+  password: string,
+  salt: string
+): Promise<string> {
+  const normalizedEmail = email.trim().toLowerCase()
+  return await sha256Hex(`${OFFLINE_INTEGRITY_SECRET}:cred:${normalizedEmail}:${salt}:${password}`)
+}
+
+async function computeOfflineRecordSignature(
+  payload: Omit<OfflineAuthRecord, 'integritySignature'>
+): Promise<string> {
+  const canonical = JSON.stringify({
+    secret: OFFLINE_INTEGRITY_SECRET,
+    email: payload.email.trim().toLowerCase(),
+    user: {
+      id: payload.user.id,
+      email: payload.user.email,
+      fullName: payload.user.fullName || '',
+      role: payload.user.role || 'Personal',
+      clinicaId: payload.user.clinicaId ?? null,
+      clinicaNombre: payload.user.clinicaNombre || '',
+      activo: payload.user.activo !== false,
+    },
+    salt: payload.salt,
+    credentialHash: payload.credentialHash,
+    verifiedOnlineAt: payload.verifiedOnlineAt,
+    offlineExpiresAt: payload.offlineExpiresAt,
+  })
+  return await sha256Hex(canonical)
+}
+
+function getOfflineAuthRecordsMap(): Record<string, OfflineAuthRecord> {
+  try {
+    const raw = localStorage.getItem(OFFLINE_AUTH_RECORDS_KEY)
+    return raw ? JSON.parse(raw) : {}
+  } catch {
+    return {}
+  }
+}
+
+function setOfflineAuthRecordsMap(records: Record<string, OfflineAuthRecord>): void {
+  try {
+    localStorage.setItem(OFFLINE_AUTH_RECORDS_KEY, JSON.stringify(records))
+  } catch {
+    // ignore storage errors
+  }
+}
+
+export function getOfflineAuthRecordByEmail(email?: string): OfflineAuthRecord | null {
+  if (!email) return null
+  const key = email.trim().toLowerCase()
+  const map = getOfflineAuthRecordsMap()
+  return map[key] || null
+}
+
+export function revokeOfflineAuthRecord(email?: string): void {
+  if (!email) return
+  const key = email.trim().toLowerCase()
+  const map = getOfflineAuthRecordsMap()
+  if (map[key]) {
+    delete map[key]
+    setOfflineAuthRecordsMap(map)
+  }
+  try {
+    const activeRaw = localStorage.getItem(ACTIVE_OFFLINE_SESSION_KEY)
+    if (activeRaw) {
+      const parsed = JSON.parse(activeRaw) as { email?: string }
+      if (parsed.email?.trim().toLowerCase() === key) {
+        localStorage.removeItem(ACTIVE_OFFLINE_SESSION_KEY)
+      }
+    }
+  } catch {
+    // ignore
+  }
+}
+
+export function clearActiveOfflineSession(): void {
+  try {
+    localStorage.removeItem(ACTIVE_OFFLINE_SESSION_KEY)
+  } catch {
+    // ignore
+  }
+}
+
+async function saveOfflineAuthRecordOnOnlineLogin(user: User, password: string): Promise<void> {
+  if (!user.email) return
+  if (user.activo === false) {
+    revokeOfflineAuthRecord(user.email)
+    return
+  }
+
+  const normalizedEmail = user.email.trim().toLowerCase()
+  const salt = generateSalt()
+  const credentialHash = await computeCredentialHash(normalizedEmail, password, salt)
+  const now = Date.now()
+  const offlineExpiresAt = now + OFFLINE_AUTH_TTL_MS
+
+  const unsignedRecord: Omit<OfflineAuthRecord, 'integritySignature'> = {
+    email: normalizedEmail,
+    user: {
+      id: user.id,
+      email: user.email,
+      fullName: user.fullName,
+      role: user.role,
+      clinicaId: user.clinicaId ?? null,
+      clinicaNombre: user.clinicaNombre,
+      activo: true,
+    },
+    salt,
+    credentialHash,
+    verifiedOnlineAt: now,
+    offlineExpiresAt,
+  }
+
+  const integritySignature = await computeOfflineRecordSignature(unsignedRecord)
+  const map = getOfflineAuthRecordsMap()
+  map[normalizedEmail] = {
+    ...unsignedRecord,
+    integritySignature,
+  }
+  setOfflineAuthRecordsMap(map)
+}
+
+export async function syncOfflineRecordProfile(user: User, extendExpiration = false): Promise<void> {
+  if (!user?.email) return
+  const normalizedEmail = user.email.trim().toLowerCase()
+  if (user.activo === false) {
+    revokeOfflineAuthRecord(normalizedEmail)
+    return
+  }
+
+  const map = getOfflineAuthRecordsMap()
+  const existing = map[normalizedEmail]
+  if (!existing) return
+
+  const now = Date.now()
+  const unsignedRecord: Omit<OfflineAuthRecord, 'integritySignature'> = {
+    ...existing,
+    user: {
+      id: user.id,
+      email: user.email,
+      fullName: user.fullName,
+      role: user.role,
+      clinicaId: user.clinicaId ?? null,
+      clinicaNombre: user.clinicaNombre,
+      activo: true,
+    },
+    verifiedOnlineAt: extendExpiration ? now : existing.verifiedOnlineAt,
+    offlineExpiresAt: extendExpiration ? now + OFFLINE_AUTH_TTL_MS : existing.offlineExpiresAt,
+  }
+
+  const integritySignature = await computeOfflineRecordSignature(unsignedRecord)
+  map[normalizedEmail] = {
+    ...unsignedRecord,
+    integritySignature,
+  }
+  setOfflineAuthRecordsMap(map)
+}
 
 export function getUserActiveStatusMap(): Record<string, boolean> {
   try {
@@ -417,39 +613,231 @@ export const authService = {
   },
 
   /**
-   * Obtiene la sesión real activa persistida en Supabase.
+   * Valida y recupera una sesión offline activa si existe y no ha expirado.
    */
-  async getCurrentSession(): Promise<AuthSession | null> {
+  async getValidActiveOfflineSession(): Promise<AuthSession | null> {
     try {
-      const { data, error } = await supabase.auth.getSession()
-      if (error || !data.session) return null
+      const rawActive = localStorage.getItem(ACTIVE_OFFLINE_SESSION_KEY)
+      if (!rawActive) return null
 
-      const sbUser = data.session.user
-      const profile = await this.getUserProfile(sbUser.id, sbUser.email, sbUser.user_metadata)
-      const user = this.buildUser(sbUser, profile)
+      const parsed = JSON.parse(rawActive) as { email?: string; token?: string }
+      const emailKey = parsed?.email?.trim().toLowerCase()
+      if (!emailKey) {
+        clearActiveOfflineSession()
+        return null
+      }
 
-      if (user.activo === false) {
-        await supabase.auth.signOut()
+      const record = getOfflineAuthRecordByEmail(emailKey)
+      if (!record) {
+        clearActiveOfflineSession()
+        return null
+      }
+
+      // Verificar integridad criptográfica del registro guardado
+      const expectedSig = await computeOfflineRecordSignature({
+        email: record.email,
+        user: record.user,
+        salt: record.salt,
+        credentialHash: record.credentialHash,
+        verifiedOnlineAt: record.verifiedOnlineAt,
+        offlineExpiresAt: record.offlineExpiresAt,
+      })
+
+      if (expectedSig !== record.integritySignature) {
+        revokeOfflineAuthRecord(emailKey)
+        return null
+      }
+
+      if (record.user.activo === false) {
+        revokeOfflineAuthRecord(emailKey)
+        return null
+      }
+
+      // Verificar si la vigencia offline ya expiró
+      if (Date.now() > record.offlineExpiresAt) {
+        clearActiveOfflineSession()
         return null
       }
 
       return {
-        user,
-        token: data.session.access_token,
-        expiresAt: data.session.expires_at,
+        user: record.user,
+        token: parsed.token || `offline_${record.integritySignature.slice(0, 24)}`,
+        expiresAt: Math.floor(record.offlineExpiresAt / 1000),
       }
     } catch {
+      clearActiveOfflineSession()
       return null
     }
   },
 
   /**
-   * Inicia sesión directamente en Supabase con email y contraseña reales.
+   * Verifica credenciales de forma offline contra el registro previamente validado en línea.
+   * Obliga a que el primer inicio de sesión haya sido online y que la vigencia no haya expirado.
+   */
+  async authenticateOffline(
+    email: string,
+    password: string
+  ): Promise<{ user: User | null; session: AuthSession | null; error: Error | null }> {
+    const normalizedEmail = email.trim().toLowerCase()
+    const record = getOfflineAuthRecordByEmail(normalizedEmail)
+
+    if (!record) {
+      return {
+        user: null,
+        session: null,
+        error: new Error(
+          'El primer inicio de sesión en este dispositivo debe realizarse obligatoriamente con conexión a Internet.'
+        ),
+      }
+    }
+
+    // 1. Verificar firma de integridad contra manipulaciones en localStorage
+    const expectedSig = await computeOfflineRecordSignature({
+      email: record.email,
+      user: record.user,
+      salt: record.salt,
+      credentialHash: record.credentialHash,
+      verifiedOnlineAt: record.verifiedOnlineAt,
+      offlineExpiresAt: record.offlineExpiresAt,
+    })
+
+    if (expectedSig !== record.integritySignature) {
+      revokeOfflineAuthRecord(normalizedEmail)
+      return {
+        user: null,
+        session: null,
+        error: new Error(
+          'Los datos locales de acceso fueron alterados. Conéctate a Internet para volver a validar tu cuenta.'
+        ),
+      }
+    }
+
+    // 2. Verificar que la cuenta esté activa según la última sincronización
+    if (record.user.activo === false) {
+      revokeOfflineAuthRecord(normalizedEmail)
+      return {
+        user: null,
+        session: null,
+        error: new Error(
+          'Esta cuenta de usuario se encuentra desactivada. Contacta al administrador.'
+        ),
+      }
+    }
+
+    // 3. Verificar fecha de expiración del acceso offline
+    const now = Date.now()
+    if (now > record.offlineExpiresAt) {
+      clearActiveOfflineSession()
+      const expiredDateStr = new Date(record.offlineExpiresAt).toLocaleDateString('es-MX', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      })
+      return {
+        user: null,
+        session: null,
+        error: new Error(
+          `Tu vigencia de acceso sin conexión expiró el ${expiredDateStr}. Conéctate a Internet para validar tus accesos y actualizar tus datos.`
+        ),
+      }
+    }
+
+    // 4. Verificar hash de contraseña con su salt
+    const candidateHash = await computeCredentialHash(normalizedEmail, password, record.salt)
+    if (candidateHash !== record.credentialHash) {
+      return {
+        user: null,
+        session: null,
+        error: new Error('Las credenciales son incorrectas'),
+      }
+    }
+
+    const token = `offline_${record.integritySignature.slice(0, 24)}`
+    try {
+      localStorage.setItem(
+        ACTIVE_OFFLINE_SESSION_KEY,
+        JSON.stringify({
+          email: normalizedEmail,
+          token,
+          startedAt: now,
+        })
+      )
+    } catch {
+      // ignore storage errors
+    }
+
+    const session: AuthSession = {
+      user: record.user,
+      token,
+      expiresAt: Math.floor(record.offlineExpiresAt / 1000),
+    }
+
+    return { user: record.user, session, error: null }
+  },
+
+  /**
+   * Obtiene la sesión real activa persistida en Supabase o la sesión offline vigente.
+   */
+  async getCurrentSession(): Promise<AuthSession | null> {
+    const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true
+
+    try {
+      const { data, error } = await supabase.auth.getSession()
+      if (!error && data.session) {
+        const sbUser = data.session.user
+        const emailKey = sbUser.email?.trim().toLowerCase()
+
+        // Si estamos sin conexión, verificar que la vigencia offline del usuario no haya expirado
+        if (!isOnline && emailKey) {
+          const offlineRecord = getOfflineAuthRecordByEmail(emailKey)
+          if (offlineRecord && Date.now() > offlineRecord.offlineExpiresAt) {
+            clearActiveOfflineSession()
+            return null
+          }
+        }
+
+        const profile = await this.getUserProfile(sbUser.id, sbUser.email, sbUser.user_metadata)
+        const user = this.buildUser(sbUser, profile)
+
+        if (user.activo === false) {
+          revokeOfflineAuthRecord(user.email)
+          await supabase.auth.signOut()
+          return null
+        }
+
+        // Si estamos en línea, actualizar los datos y extender la vigencia offline
+        if (isOnline) {
+          await syncOfflineRecordProfile(user, true)
+        }
+
+        return {
+          user,
+          token: data.session.access_token,
+          expiresAt: data.session.expires_at,
+        }
+      }
+    } catch {
+      // Fallback a sesión offline
+    }
+
+    return await this.getValidActiveOfflineSession()
+  },
+
+  /**
+   * Inicia sesión en Supabase cuando hay Internet (guardando credenciales cifradas y fecha de expiración),
+   * o valida el acceso offline si no hay conexión y existe un registro previo vigente.
    */
   async signInWithPassword(
     email: string,
     password: string
   ): Promise<{ user: User | null; session: AuthSession | null; error: Error | null }> {
+    const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true
+
+    // Si el dispositivo no tiene internet, usar directamente el validador offline
+    if (!isOnline) {
+      return await this.authenticateOffline(email, password)
+    }
+
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
@@ -457,6 +845,17 @@ export const authService = {
       })
 
       if (error) {
+        const msgLower = error.message.toLowerCase()
+        const isNetworkError =
+          msgLower.includes('fetch') ||
+          msgLower.includes('network') ||
+          msgLower.includes('failed to fetch') ||
+          msgLower.includes('load failed')
+
+        if (isNetworkError) {
+          return await this.authenticateOffline(email, password)
+        }
+
         return { user: null, session: null, error: new Error(error.message) }
       }
 
@@ -469,12 +868,30 @@ export const authService = {
       const user = this.buildUser(sbUser, profile)
 
       if (user.activo === false) {
+        revokeOfflineAuthRecord(user.email)
         await supabase.auth.signOut()
         return {
           user: null,
           session: null,
           error: new Error('Esta cuenta de usuario se encuentra desactivada. Contacta al administrador.'),
         }
+      }
+
+      // Guardar perfil validado en línea + hash de contraseña + nueva fecha de expiración offline
+      await saveOfflineAuthRecordOnOnlineLogin(user, password)
+
+      // También dejar respaldada la sesión offline activa por si pierde conexión más adelante
+      try {
+        localStorage.setItem(
+          ACTIVE_OFFLINE_SESSION_KEY,
+          JSON.stringify({
+            email: user.email.trim().toLowerCase(),
+            token: data.session.access_token,
+            startedAt: Date.now(),
+          })
+        )
+      } catch {
+        // ignore
       }
 
       const session: AuthSession = {
@@ -485,6 +902,16 @@ export const authService = {
 
       return { user, session, error: null }
     } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : ''
+      const isNetworkErr =
+        !navigator.onLine ||
+        msg.toLowerCase().includes('fetch') ||
+        msg.toLowerCase().includes('network')
+
+      if (isNetworkErr) {
+        return await this.authenticateOffline(email, password)
+      }
+
       return {
         user: null,
         session: null,
@@ -518,11 +945,20 @@ export const authService = {
    */
   async updateOwnPassword(newPassword: string): Promise<{ error: Error | null }> {
     try {
-      const { error } = await supabase.auth.updateUser({
+      const { data, error } = await supabase.auth.updateUser({
         password: newPassword,
       })
       if (error) {
         return { error: new Error(error.message) }
+      }
+      if (data.user) {
+        const profile = await this.getUserProfile(
+          data.user.id,
+          data.user.email,
+          data.user.user_metadata
+        )
+        const built = this.buildUser(data.user, profile)
+        await saveOfflineAuthRecordOnOnlineLogin(built, newPassword)
       }
       return { error: null }
     } catch (err: unknown) {
@@ -590,9 +1026,10 @@ export const authService = {
   },
 
   /**
-   * Cierra la sesión activa en Supabase.
+   * Cierra la sesión activa en Supabase y limpia la sesión offline activa (conservando el registro para futuros logins offline vigentes).
    */
   async signOut(): Promise<void> {
+    clearActiveOfflineSession()
     try {
       await supabase.auth.signOut()
     } catch (error) {

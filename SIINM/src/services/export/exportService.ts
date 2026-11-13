@@ -1,11 +1,15 @@
 import { Workbook } from 'exceljs'
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib'
+import { z } from 'zod'
 import { db } from '@/db'
+import { supabase } from '@/services/supabase/client'
+import { inventarioRepository } from '@/db/repositories/inventario.repository'
 import type { InventarioItem } from '@/types/inventory.types'
 
 export interface ExportInventoryItem {
   id?: string | number
   id_clinica?: number
+  id_medicamento?: number | string
   clave_ssa: string
   medicamento: string
   presentacion: string
@@ -14,12 +18,53 @@ export interface ExportInventoryItem {
   stock: number
   codigo_barras?: string
   clinicaNombre?: string
+  update_date?: string
 }
 
 export interface ExportOptions {
+  clinicId?: number | null
   clinicName?: string
   userName?: string
   generatedAt?: Date
+}
+
+export interface SyncPackageItem {
+  id?: string | number
+  id_clinica: number
+  id_medicamento?: number | string
+  clave_ssa: string
+  medicamento: string
+  presentacion: string
+  lote: string
+  fecha_caducidad: string
+  stock: number
+  codigo_barras?: string
+  update_date: string
+}
+
+export interface SyncPackageMetadata {
+  magic: 'SIINM_SYNC_V1'
+  version: 1
+  exportedAt: string
+  clinicId: number | null
+  clinicName: string
+  exportedBy: string
+  recordCount: number
+  totalStock: number
+}
+
+export interface SyncPackageEnvelope {
+  metadata: SyncPackageMetadata
+  items: SyncPackageItem[]
+  integrityHash: string
+}
+
+export interface ImportSyncResult {
+  inserted: number
+  updated: number
+  skipped: number
+  totalProcessed: number
+  errors: string[]
 }
 
 export type ExpiryStatus = 'vigente' | 'por_caducar' | 'caducado'
@@ -135,6 +180,7 @@ export async function getInventoryExportData(idClinica?: number | null): Promise
         const exportItem: ExportInventoryItem = {
           id: item.id || dedupeKey,
           id_clinica: item.id_clinica,
+          id_medicamento: item.id_medicamento || catItem?.id || '',
           clave_ssa: item.clave_ssa || catItem?.clave_ssa || catItem?.codigo_barras || '',
           medicamento: item.medicamento || catItem?.medicamento || catItem?.name || 'Medicamento sin nombre',
           presentacion: item.presentacion || catItem?.presentacion || 'Pieza',
@@ -142,6 +188,7 @@ export async function getInventoryExportData(idClinica?: number | null): Promise
           fecha_caducidad: item.fecha_caducidad || 'N/A',
           stock: Number(item.stock) || 0,
           codigo_barras: item.codigo_barras || catItem?.codigo_barras || '',
+          update_date: item.update_date || new Date().toISOString(),
         }
 
         const existing = dedupMap.get(dedupeKey)
@@ -733,7 +780,7 @@ export async function exportToPdf(
   }
 
   const pdfBytes = await pdfDoc.save()
-  const blob = new Blob([pdfBytes], { type: 'application/pdf' })
+  const blob = new Blob([pdfBytes as unknown as BlobPart], { type: 'application/pdf' })
   const cleanClinic = clinicName.replace(/[^a-zA-Z0-9_-]/g, '_')
   const filename = `Inventario_${cleanClinic}_${formatDateString(generatedAt)}.pdf`
   downloadBlob(blob, filename)
@@ -788,4 +835,497 @@ export async function exportToCsv(
   const cleanClinic = clinicName.replace(/[^a-zA-Z0-9_-]/g, '_')
   const filename = `Inventario_${cleanClinic}_${formatDateString(generatedAt)}.csv`
   downloadBlob(blob, filename)
+}
+
+// ============================================================================
+// FORMATO SEGURO .sync.gz (COMPRESIÓN GZIP + FIRMA SHA-256 + VALIDACIÓN ZOD)
+// ============================================================================
+
+const SYNC_MAGIC = 'SIINM_SYNC_V1' as const
+const SYNC_INTEGRITY_SALT = 'SIINM_SECURE_TRANSPORT_2026_V1_SALT'
+
+const SyncPackageItemSchema = z.object({
+  id: z.union([z.string(), z.number()]).optional(),
+  id_clinica: z.number().int().nonnegative(),
+  id_medicamento: z.union([z.string(), z.number()]).optional(),
+  clave_ssa: z.string(),
+  medicamento: z.string().min(1, 'El nombre del medicamento es obligatorio'),
+  presentacion: z.string(),
+  lote: z.string().min(1, 'El lote es obligatorio'),
+  fecha_caducidad: z.string(),
+  stock: z.number().nonnegative('El stock no puede ser negativo'),
+  codigo_barras: z.string().optional(),
+  update_date: z.string(),
+})
+
+const SyncPackageMetadataSchema = z.object({
+  magic: z.literal(SYNC_MAGIC),
+  version: z.literal(1),
+  exportedAt: z.string(),
+  clinicId: z.number().nullable(),
+  clinicName: z.string().min(1),
+  exportedBy: z.string().min(1),
+  recordCount: z.number().int().nonnegative(),
+  totalStock: z.number().nonnegative(),
+})
+
+const SyncPackageEnvelopeSchema = z.object({
+  metadata: SyncPackageMetadataSchema,
+  items: z.array(SyncPackageItemSchema),
+  integrityHash: z.string().min(32),
+})
+
+/**
+ * Calcula un hash de integridad SHA-256 determinístico sobre los metadatos y registros.
+ */
+async function computeSyncIntegrityHash(
+  metadata: SyncPackageMetadata,
+  items: SyncPackageItem[]
+): Promise<string> {
+  const canonicalItems = items.map((it) => ({
+    c: Number(it.id_clinica) || 0,
+    m: String(it.id_medicamento ?? ''),
+    s: String(it.clave_ssa || '').trim(),
+    n: String(it.medicamento || '').trim(),
+    p: String(it.presentacion || '').trim(),
+    l: String(it.lote || '').trim(),
+    f: String(it.fecha_caducidad || '').trim(),
+    k: Number(it.stock) || 0,
+    b: String(it.codigo_barras || '').trim(),
+    u: String(it.update_date || ''),
+  }))
+
+  const canonicalPayload = JSON.stringify({
+    salt: SYNC_INTEGRITY_SALT,
+    magic: metadata.magic,
+    version: metadata.version,
+    exportedAt: metadata.exportedAt,
+    clinicId: metadata.clinicId,
+    clinicName: metadata.clinicName,
+    exportedBy: metadata.exportedBy,
+    recordCount: metadata.recordCount,
+    totalStock: metadata.totalStock,
+    items: canonicalItems,
+  })
+
+  const encoder = new TextEncoder()
+  const data = encoder.encode(canonicalPayload)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+  const hashArray = Array.from(new Uint8Array(hashBuffer))
+  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+/**
+ * Comprime un string en formato GZIP nativo (.gz) usando CompressionStream
+ */
+async function compressGzip(text: string): Promise<Blob> {
+  const encoder = new TextEncoder()
+  const rawBytes = encoder.encode(text)
+
+  if (typeof CompressionStream !== 'undefined') {
+    const stream = new Blob([rawBytes]).stream().pipeThrough(new CompressionStream('gzip'))
+    return await new Response(stream).blob()
+  }
+
+  throw new Error('Este navegador no soporta compresión GZIP nativa (CompressionStream).')
+}
+
+/**
+ * Descomprime un archivo/Blob GZIP (.gz) usando DecompressionStream
+ */
+async function decompressGzip(file: File | Blob): Promise<string> {
+  if (typeof DecompressionStream === 'undefined') {
+    throw new Error('Este navegador no soporta descompresión GZIP nativa (DecompressionStream).')
+  }
+
+  try {
+    const stream = file.stream().pipeThrough(new DecompressionStream('gzip'))
+    const decompressedResponse = new Response(stream)
+    return await decompressedResponse.text()
+  } catch {
+    throw new Error(
+      'El archivo no es un paquete GZIP válido o su estructura binaria está dañada.'
+    )
+  }
+}
+
+/**
+ * Exporta el inventario a un archivo seguro comprimido y firmado (.sync.gz)
+ */
+export async function exportToSyncGz(
+  items: ExportInventoryItem[],
+  options: ExportOptions = {}
+): Promise<void> {
+  const {
+    clinicId = null,
+    clinicName = 'Unidad Médica General',
+    userName = 'Sistema SIINM',
+    generatedAt = new Date(),
+  } = options
+
+  const isoNow = generatedAt.toISOString()
+
+  const syncItems: SyncPackageItem[] = items.map((item) => ({
+    id: item.id,
+    id_clinica: Number(item.id_clinica || clinicId || 0),
+    id_medicamento: item.id_medicamento ?? '',
+    clave_ssa: String(item.clave_ssa || '').trim(),
+    medicamento: String(item.medicamento || 'Medicamento').trim(),
+    presentacion: String(item.presentacion || 'Pieza').trim(),
+    lote: String(item.lote || '00000').trim(),
+    fecha_caducidad: String(item.fecha_caducidad || 'N/A').trim(),
+    stock: Math.max(0, Number(item.stock) || 0),
+    codigo_barras: String(item.codigo_barras || '').trim(),
+    update_date: item.update_date || isoNow,
+  }))
+
+  const totalStock = syncItems.reduce((acc, curr) => acc + curr.stock, 0)
+
+  const metadata: SyncPackageMetadata = {
+    magic: SYNC_MAGIC,
+    version: 1,
+    exportedAt: isoNow,
+    clinicId: clinicId && clinicId > 0 ? Number(clinicId) : null,
+    clinicName,
+    exportedBy: userName,
+    recordCount: syncItems.length,
+    totalStock,
+  }
+
+  const integrityHash = await computeSyncIntegrityHash(metadata, syncItems)
+
+  const envelope: SyncPackageEnvelope = {
+    metadata,
+    items: syncItems,
+    integrityHash,
+  }
+
+  const jsonPayload = JSON.stringify(envelope)
+  const gzipBlob = await compressGzip(jsonPayload)
+  const finalBlob = new Blob([gzipBlob], { type: 'application/gzip' })
+
+  const cleanClinic = clinicName.replace(/[^a-zA-Z0-9_-]/g, '_')
+  const filename = `Inventario_${cleanClinic}_${formatDateString(generatedAt)}.sync.gz`
+  downloadBlob(finalBlob, filename)
+}
+
+/**
+ * Descomprime y valida criptográfica y estructuralmente un archivo .sync.gz
+ */
+export async function validateSyncGzFile(file: File): Promise<SyncPackageEnvelope> {
+  if (!file) {
+    throw new Error('No se seleccionó ningún archivo.')
+  }
+
+  const fileNameLower = file.name.toLowerCase()
+  if (!fileNameLower.endsWith('.sync.gz') && !fileNameLower.endsWith('.gz')) {
+    throw new Error('Formato de archivo inválido. Debe seleccionar un archivo con extensión .sync.gz')
+  }
+
+  if (file.size === 0) {
+    throw new Error('El archivo seleccionado está vacío.')
+  }
+
+  if (file.size > 25 * 1024 * 1024) {
+    throw new Error('El archivo excede el tamaño máximo permitido (25 MB).')
+  }
+
+  // 1. Descomprimir GZIP
+  const decompressedText = await decompressGzip(file)
+
+  // 2. Parsear JSON
+  let rawParsed: unknown
+  try {
+    rawParsed = JSON.parse(decompressedText)
+  } catch {
+    throw new Error('El contenido del archivo .sync.gz no tiene una estructura de datos válida.')
+  }
+
+  // 3. Validar esquema con Zod
+  const parsedResult = SyncPackageEnvelopeSchema.safeParse(rawParsed)
+  if (!parsedResult.success) {
+    const firstIssue = parsedResult.error.issues[0]
+    throw new Error(
+      `Estructura de paquete inválida (${firstIssue?.path.join('.') || 'formato'}): ${
+        firstIssue?.message || 'El archivo no cumple el esquema SIINM.'
+      }`
+    )
+  }
+
+  const envelope = parsedResult.data
+
+  // 4. Validar consistencia de conteos en metadatos
+  if (envelope.metadata.recordCount !== envelope.items.length) {
+    throw new Error(
+      `Inconsistencia detectada: la cabecera declara ${envelope.metadata.recordCount} registros pero el paquete contiene ${envelope.items.length}.`
+    )
+  }
+
+  const calculatedTotalStock = envelope.items.reduce((acc, it) => acc + (Number(it.stock) || 0), 0)
+  if (envelope.metadata.totalStock !== calculatedTotalStock) {
+    throw new Error(
+      `Inconsistencia detectada en el total de existencias (${envelope.metadata.totalStock} vs ${calculatedTotalStock}).`
+    )
+  }
+
+  // 5. Verificar firma criptográfica SHA-256 contra manipulaciones
+  const expectedHash = await computeSyncIntegrityHash(envelope.metadata, envelope.items)
+  if (expectedHash !== envelope.integrityHash) {
+    throw new Error(
+      'Firma de seguridad SHA-256 inválida: los datos del archivo fueron modificados externamente o están corruptos.'
+    )
+  }
+
+  return envelope
+}
+
+/**
+ * Sincroniza e importa los datos de un paquete .sync.gz previamente validado hacia Supabase y Dexie.
+ * Requiere conexión activa a Internet.
+ */
+export async function importSyncPackageToSupabase(
+  envelope: SyncPackageEnvelope,
+  options: {
+    fallbackClinicId?: number | null
+    mode?: 'replace' | 'accumulate'
+    onProgress?: (processed: number, total: number) => void
+  } = {}
+): Promise<ImportSyncResult> {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    throw new Error(
+      'Se requiere conexión a Internet activa para importar y actualizar los datos en Supabase.'
+    )
+  }
+
+  const { fallbackClinicId = null, mode = 'replace', onProgress } = options
+
+  // Revalidar firma antes de ejecutar escritura remota
+  const expectedHash = await computeSyncIntegrityHash(envelope.metadata, envelope.items)
+  if (expectedHash !== envelope.integrityHash) {
+    throw new Error('La verificación de firma de integridad falló antes de sincronizar.')
+  }
+
+  // 1. Obtener catálogo de medicamentos desde Supabase para resolver id_medicamento de forma confiable
+  const { data: remoteCatalog, error: catError } = await supabase
+    .from('catalogo_medicamentos')
+    .select('id, clave_ssa, codigo_barras, medicamento, presentacion')
+
+  if (catError) {
+    throw new Error(`No se pudo conectar con Supabase para validar el catálogo: ${catError.message}`)
+  }
+
+  const catalogById = new Map<string, Record<string, unknown>>()
+  const catalogByClave = new Map<string, Record<string, unknown>>()
+  const catalogByBarcode = new Map<string, Record<string, unknown>>()
+
+  for (const c of remoteCatalog || []) {
+    if (c.id !== undefined && c.id !== null) {
+      catalogById.set(String(c.id).trim().toLowerCase(), c)
+    }
+    if (c.clave_ssa) {
+      catalogByClave.set(String(c.clave_ssa).trim().toLowerCase(), c)
+    }
+    if (c.codigo_barras) {
+      catalogByBarcode.set(String(c.codigo_barras).trim().toLowerCase(), c)
+    }
+  }
+
+  // 2. Identificar las clínicas involucradas en el paquete
+  const targetClinicsSet = new Set<number>()
+  for (const item of envelope.items) {
+    const cid = Number(item.id_clinica || envelope.metadata.clinicId || fallbackClinicId || 0)
+    if (cid > 0) targetClinicsSet.add(cid)
+  }
+
+  if (targetClinicsSet.size === 0) {
+    throw new Error(
+      'El paquete no especifica una clínica destino válida. Selecciona una Unidad Médica antes de importar.'
+    )
+  }
+
+  // 3. Consultar registros actuales en Supabase para las clínicas involucradas
+  const clinicIds = Array.from(targetClinicsSet)
+  const { data: existingRemoteItems, error: invFetchErr } = await supabase
+    .from('Inventario')
+    .select('id, id_clinica, id_medicamento, lote, stock, fecha_caducidad')
+    .in('id_clinica', clinicIds)
+
+  if (invFetchErr) {
+    throw new Error(`Error al consultar inventario actual en Supabase: ${invFetchErr.message}`)
+  }
+
+  // Mapa rápido por clave compuesta: `${id_clinica}-${id_medicamento}-${lote_lower}`
+  const existingRemoteMap = new Map<
+    string,
+    { id: number | string; stock: number; fecha_caducidad: string }
+  >()
+  for (const rem of existingRemoteItems || []) {
+    const key = `${Number(rem.id_clinica)}-${String(rem.id_medicamento).trim().toLowerCase()}-${String(
+      rem.lote || ''
+    )
+      .trim()
+      .toLowerCase()}`
+    existingRemoteMap.set(key, {
+      id: rem.id,
+      stock: Number(rem.stock) || 0,
+      fecha_caducidad: String(rem.fecha_caducidad || 'N/A'),
+    })
+  }
+
+  let inserted = 0
+  let updated = 0
+  let skipped = 0
+  const errors: string[] = []
+  const nowIso = new Date().toISOString()
+
+  for (let i = 0; i < envelope.items.length; i++) {
+    const item = envelope.items[i]
+    const resolvedClinicId = Number(
+      item.id_clinica || envelope.metadata.clinicId || fallbackClinicId || 0
+    )
+
+    if (!resolvedClinicId || resolvedClinicId <= 0) {
+      skipped++
+      errors.push(`Fila ${i + 1} (${item.medicamento}): Sin clínica asignada.`)
+      onProgress?.(i + 1, envelope.items.length)
+      continue
+    }
+
+    // Resolver id_medicamento contra el catálogo de Supabase
+    const rawMedId = String(item.id_medicamento ?? '').trim().toLowerCase()
+    const rawClave = String(item.clave_ssa || '').trim().toLowerCase()
+    const rawBarcode = String(item.codigo_barras || '').trim().toLowerCase()
+
+    const matchedCat =
+      (rawMedId ? catalogById.get(rawMedId) : undefined) ||
+      (rawClave ? catalogByClave.get(rawClave) : undefined) ||
+      (rawBarcode ? catalogByBarcode.get(rawBarcode) : undefined)
+
+    const resolvedMedId = matchedCat?.id ?? item.id_medicamento
+    if (
+      resolvedMedId === undefined ||
+      resolvedMedId === null ||
+      String(resolvedMedId).trim() === ''
+    ) {
+      skipped++
+      errors.push(
+        `Fila ${i + 1} (${item.medicamento} - Clave ${item.clave_ssa || 'S/C'}): No se encontró equivalencia en el catálogo de Supabase.`
+      )
+      onProgress?.(i + 1, envelope.items.length)
+      continue
+    }
+
+    const medIdParsed: number | string = !isNaN(Number(resolvedMedId))
+      ? Number(resolvedMedId)
+      : String(resolvedMedId)
+    const loteClean = String(item.lote || '00000').trim()
+    const lookupKey = `${resolvedClinicId}-${String(medIdParsed).trim().toLowerCase()}-${loteClean.toLowerCase()}`
+
+    const existingRemote = existingRemoteMap.get(lookupKey)
+
+    try {
+      if (existingRemote) {
+        const finalStock =
+          mode === 'accumulate'
+            ? Math.max(0, Number(existingRemote.stock) + Number(item.stock))
+            : Math.max(0, Number(item.stock))
+
+        const updatePayload = {
+          stock: finalStock,
+          fecha_caducidad: item.fecha_caducidad || existingRemote.fecha_caducidad || 'N/A',
+          update_date: nowIso,
+        }
+
+        const { error: updErr } = await supabase
+          .from('Inventario')
+          .update(updatePayload)
+          .eq('id', existingRemote.id)
+
+        if (updErr) {
+          skipped++
+          errors.push(`Error actualizando lote ${loteClean} (${item.medicamento}): ${updErr.message}`)
+        } else {
+          updated++
+          existingRemoteMap.set(lookupKey, {
+            id: existingRemote.id,
+            stock: finalStock,
+            fecha_caducidad: updatePayload.fecha_caducidad,
+          })
+
+          await db.inventario.put({
+            id: existingRemote.id,
+            id_clinica: resolvedClinicId,
+            id_medicamento: medIdParsed,
+            lote: loteClean,
+            stock: finalStock,
+            fecha_caducidad: updatePayload.fecha_caducidad,
+            update_date: nowIso,
+            medicamento: (matchedCat?.medicamento as string) || item.medicamento,
+            clave_ssa: (matchedCat?.clave_ssa as string) || item.clave_ssa,
+            presentacion: (matchedCat?.presentacion as string) || item.presentacion,
+            codigo_barras: (matchedCat?.codigo_barras as string) || item.codigo_barras,
+          })
+        }
+      } else {
+        const insertPayload = {
+          id_clinica: resolvedClinicId,
+          id_medicamento: medIdParsed,
+          lote: loteClean,
+          stock: Math.max(0, Number(item.stock)),
+          fecha_caducidad: item.fecha_caducidad || 'N/A',
+          update_date: nowIso,
+        }
+
+        const { data: insertedRows, error: insErr } = await supabase
+          .from('Inventario')
+          .insert(insertPayload)
+          .select()
+
+        if (insErr) {
+          skipped++
+          errors.push(`Error insertando lote ${loteClean} (${item.medicamento}): ${insErr.message}`)
+        } else {
+          inserted++
+          const newRemoteId = insertedRows?.[0]?.id
+          if (newRemoteId !== undefined) {
+            existingRemoteMap.set(lookupKey, {
+              id: newRemoteId,
+              stock: insertPayload.stock,
+              fecha_caducidad: insertPayload.fecha_caducidad,
+            })
+
+            await db.inventario.put({
+              id: newRemoteId,
+              id_clinica: resolvedClinicId,
+              id_medicamento: medIdParsed,
+              lote: loteClean,
+              stock: insertPayload.stock,
+              fecha_caducidad: insertPayload.fecha_caducidad,
+              update_date: nowIso,
+              medicamento: (matchedCat?.medicamento as string) || item.medicamento,
+              clave_ssa: (matchedCat?.clave_ssa as string) || item.clave_ssa,
+              presentacion: (matchedCat?.presentacion as string) || item.presentacion,
+              codigo_barras: (matchedCat?.codigo_barras as string) || item.codigo_barras,
+            })
+          }
+        }
+      }
+    } catch (err) {
+      skipped++
+      const msg = err instanceof Error ? err.message : 'Error de red'
+      errors.push(`Excepción en lote ${loteClean}: ${msg}`)
+    }
+
+    onProgress?.(i + 1, envelope.items.length)
+  }
+
+  await inventarioRepository.deduplicateLocal()
+
+  return {
+    inserted,
+    updated,
+    skipped,
+    totalProcessed: envelope.items.length,
+    errors,
+  }
 }

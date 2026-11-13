@@ -41,7 +41,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-type FilterMode = "todos" | "caducan" | "tres_meses";
+type FilterMode = "todos" | "correctos" | "urgentes" | "criticos";
 
 export interface DisplayInventoryItem {
   id: string | number;
@@ -53,29 +53,66 @@ export interface DisplayInventoryItem {
   stock: number;
 }
 
-// Verifica si la fecha de caducidad está dentro del rango especificado
-const isExpiringSoon = (
-  expirationDate?: string,
-  maxDays = 30,
-  currentTimestamp = Date.now(),
-) => {
-  if (!expirationDate || expirationDate === "N/A") return false;
+// Parsea distintos formatos de fecha de caducidad (YYYY-MM-DD, DD/MM/YYYY, MM/YY, MM/YYYY)
+const parseExpirationDate = (expirationDate?: string): number | null => {
+  if (!expirationDate || expirationDate === "N/A") return null;
+  const trimmed = expirationDate.trim();
+  if (!trimmed) return null;
 
-  let expTime = 0;
-  if (expirationDate.includes("/")) {
-    const parts = expirationDate.split("/").map(Number);
+  // Formato con diagonales: MM/YY, MM/YYYY o DD/MM/YYYY
+  if (trimmed.includes("/")) {
+    const parts = trimmed.split("/").map(Number);
+    if (parts.some(isNaN)) return null;
+
     if (parts.length === 2) {
       const m = parts[0];
       const y = parts[1] < 100 ? parts[1] + 2000 : parts[1];
-      expTime = new Date(y, m, 0).getTime();
+      if (m < 1 || m > 12) return null;
+      return new Date(y, m, 0, 23, 59, 59, 999).getTime();
     }
-  } else {
-    expTime = new Date(expirationDate).getTime();
+
+    if (parts.length === 3) {
+      const d = parts[0];
+      const m = parts[1];
+      const y = parts[2] < 100 ? parts[2] + 2000 : parts[2];
+      if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+      return new Date(y, m - 1, d, 23, 59, 59, 999).getTime();
+    }
   }
 
-  if (isNaN(expTime)) return false;
+  // Formato ISO YYYY-MM-DD
+  const isoMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  if (isoMatch) {
+    const y = Number(isoMatch[1]);
+    const m = Number(isoMatch[2]);
+    const d = Number(isoMatch[3]);
+    return new Date(y, m - 1, d, 23, 59, 59, 999).getTime();
+  }
+
+  const parsed = new Date(trimmed).getTime();
+  return isNaN(parsed) ? null : parsed;
+};
+
+// Clasifica la fecha de caducidad según los rangos del semáforo:
+// - 'criticos': < 6 meses (< 180 días, incluyendo ya caducados)
+// - 'urgentes': 6 a 12 meses (entre 180 y 365 días)
+// - 'correctos': > 12 meses (> 365 días)
+const getExpiryFilterCategory = (
+  expirationDate?: string,
+  currentTimestamp = Date.now(),
+): "correctos" | "urgentes" | "criticos" | null => {
+  const expTime = parseExpirationDate(expirationDate);
+  if (expTime === null) return null;
+
   const diffDays = (expTime - currentTimestamp) / (1000 * 60 * 60 * 24);
-  return diffDays >= 0 && diffDays <= maxDays;
+
+  if (diffDays < 180) {
+    return "criticos";
+  }
+  if (diffDays <= 365) {
+    return "urgentes";
+  }
+  return "correctos";
 };
 
 export const InventoryPage: React.FC = () => {
@@ -88,7 +125,7 @@ export const InventoryPage: React.FC = () => {
   const [currentTimestamp] = useState(() => Date.now());
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [medicineToDelete, setMedicineToDelete] =
-    useState<InventoryItem | null>(null);
+    useState<DisplayInventoryItem | null>(null);
   const [loteToVerify, setLoteToVerify] = useState<string>("");
 
   // Limpiar cualquier registro duplicado residual en Dexie al montar la página
@@ -193,6 +230,7 @@ export const InventoryPage: React.FC = () => {
 
   const DeleteMedicine = async () => {
     setConfirmDelete(false);
+    if (!medicineToDelete) return;
 
     try {
       await inventarioRepository.delete(medicineToDelete.id);
@@ -204,7 +242,7 @@ export const InventoryPage: React.FC = () => {
     }
   };
 
-  const handleDelete = (medicine: InventoryItem) => {
+  const handleDelete = (medicine: DisplayInventoryItem) => {
     setConfirmDelete(true);
     setMedicineToDelete(medicine);
   };
@@ -225,11 +263,12 @@ export const InventoryPage: React.FC = () => {
 
       if (!matchesSearch) return false;
 
-      if (filterMode === "caducan") {
-        return isExpiringSoon(m.fecha_caducidad, 30, currentTimestamp);
-      }
-      if (filterMode === "tres_meses") {
-        return isExpiringSoon(m.fecha_caducidad, 10, currentTimestamp);
+      if (filterMode !== "todos") {
+        const category = getExpiryFilterCategory(
+          m.fecha_caducidad,
+          currentTimestamp,
+        );
+        return category === filterMode;
       }
 
       return true;
@@ -323,17 +362,24 @@ export const InventoryPage: React.FC = () => {
           </Button>
           <Button
             size="sm"
-            variant={filterMode === "caducan" ? "default" : "secondary"}
-            onClick={() => setFilterMode("caducan")}
+            variant={filterMode === "correctos" ? "default" : "secondary"}
+            onClick={() => setFilterMode("correctos")}
           >
-            Caducan (&lt;30 días)
+            Correctos (&gt; 12 meses)
           </Button>
           <Button
             size="sm"
-            variant={filterMode === "tres_meses" ? "default" : "secondary"}
-            onClick={() => setFilterMode("tres_meses")}
+            variant={filterMode === "urgentes" ? "default" : "secondary"}
+            onClick={() => setFilterMode("urgentes")}
           >
-            Urgentes (&lt;10 días)
+            Urgentes (6 - 12 meses)
+          </Button>
+          <Button
+            size="sm"
+            variant={filterMode === "criticos" ? "default" : "secondary"}
+            onClick={() => setFilterMode("criticos")}
+          >
+            Críticos (&lt; 6 meses)
           </Button>
         </div>
 
@@ -391,9 +437,8 @@ export const InventoryPage: React.FC = () => {
             </TableHeader>
             <TableBody>
               {paginatedMedicines.map((m) => {
-                const criticalExpiry = isExpiringSoon(
+                const expiryCategory = getExpiryFilterCategory(
                   m.fecha_caducidad,
-                  15,
                   currentTimestamp,
                 );
                 return (
@@ -411,14 +456,22 @@ export const InventoryPage: React.FC = () => {
                       {m.lote}
                     </TableCell>
                     <TableCell>
-                      {criticalExpiry ? (
+                      {expiryCategory === "criticos" ? (
                         <Badge variant="destructive">
                           {m.fecha_caducidad || "N/A"}
                         </Badge>
-                      ) : (
-                        <span className="text-slate-700 font-medium">
+                      ) : expiryCategory === "urgentes" ? (
+                        <Badge variant="warning">
                           {m.fecha_caducidad || "N/A"}
-                        </span>
+                        </Badge>
+                      ) : expiryCategory === "correctos" ? (
+                        <Badge variant="success">
+                          {m.fecha_caducidad || "N/A"}
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary">
+                          {m.fecha_caducidad || "N/A"}
+                        </Badge>
                       )}
                     </TableCell>
                     <TableCell className="font-bold text-slate-800">

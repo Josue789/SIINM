@@ -7,8 +7,13 @@ import React, {
   useCallback,
 } from "react";
 import type { User, AuthSession, AuthState } from "../types/auth.types";
-import { authService } from "../services/supabase/auth.service";
+import {
+  authService,
+  syncOfflineRecordProfile,
+  revokeOfflineAuthRecord,
+} from "../services/supabase/auth.service";
 import { supabase } from "../services/supabase/client";
+import { networkWatcher } from "../sync/networkWatcher";
 import { toast } from "react-toastify";
 import {
   Dialog,
@@ -86,9 +91,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         setIsRecoveryOpen(true);
       }
       if (!sbSession) {
-        setUser(null);
-        setSession(null);
-        setIsLoading(false);
+        if (event === "SIGNED_OUT") {
+          setUser(null);
+          setSession(null);
+          setIsLoading(false);
+          return;
+        }
+        // Si no hay sesión de Supabase (ej. inicio offline), verificar si existe sesión offline válida
+        authService
+          .getValidActiveOfflineSession()
+          .then((offlineSess) => {
+            if (!isMounted) return;
+            if (offlineSess) {
+              setUser(offlineSess.user);
+              setSession(offlineSess);
+            } else {
+              setUser(null);
+              setSession(null);
+            }
+            setIsLoading(false);
+          })
+          .catch(() => {
+            if (!isMounted) return;
+            setUser(null);
+            setSession(null);
+            setIsLoading(false);
+          });
         return;
       }
 
@@ -104,6 +132,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
         const u = authService.buildUser(sbSession.user, profile);
         if (u.activo === false) {
+          revokeOfflineAuthRecord(u.email);
           await authService.signOut();
           if (!isMounted) return;
           setUser(null);
@@ -113,6 +142,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
             "Esta cuenta se encuentra desactivada. Contacta al administrador.",
           );
           return;
+        }
+
+        if (typeof navigator !== "undefined" && navigator.onLine) {
+          await syncOfflineRecordProfile(u, true);
         }
 
         setUser(u);
@@ -238,9 +271,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       sbUser?.user_metadata,
     );
     if (profile) {
+      const base = sbUser || user || { id: targetId, email: targetEmail || "" };
+      const updatedUser = authService.buildUser(base, profile);
+
+      if (updatedUser.activo === false) {
+        revokeOfflineAuthRecord(updatedUser.email);
+        await authService.signOut();
+        setUser(null);
+        setSession(null);
+        toast.error(
+          "Tu cuenta ha sido desactivada. Se ha cerrado la sesión.",
+        );
+        return;
+      }
+
+      if (typeof navigator !== "undefined" && navigator.onLine) {
+        await syncOfflineRecordProfile(updatedUser, true);
+      }
+
       setUser((prev) => {
-        const base = sbUser || prev || { id: targetId, email: targetEmail || "" };
-        const updatedUser = authService.buildUser(base, profile);
         if (
           prev &&
           prev.id === updatedUser.id &&
@@ -256,12 +305,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       });
       setSession((prev) => {
         if (!prev) return null;
-        const base = sbUser || prev.user;
-        const updatedUser = authService.buildUser(base, profile);
         return { ...prev, user: updatedUser };
       });
     }
-  }, [user?.id, user?.email]);
+  }, [user]);
+
+  // Al recuperar la conexión a Internet, revalidar accesos y datos del usuario en segundo plano
+  useEffect(() => {
+    if (!user?.id) return;
+    const unsubscribe = networkWatcher.subscribe((online) => {
+      if (online) {
+        refreshProfile().catch(console.error);
+      }
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [user?.id, refreshProfile]);
 
   const value = useMemo(
     () => ({
