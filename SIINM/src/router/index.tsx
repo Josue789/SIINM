@@ -5,6 +5,7 @@ import { AuthLayout } from "../layouts/AuthLayout";
 import { ProtectedRoute } from "./guards/ProtectedRoute";
 import { PublicRoute } from "./guards/PublicRoute";
 import { LoginPage } from "../pages/auth/LoginPage";
+import { ResetPasswordPage } from "../pages/auth/ResetPasswordPage";
 import { DashboardPage } from "../pages/dashboard/DashboardPage";
 import { InventoryPage } from "../pages/inventory/InventoryPage";
 import { SyncPage } from "../pages/sync/SyncPage";
@@ -24,6 +25,17 @@ export const router = createBrowserRouter([
   {
     element: <RootLayout />,
     children: [
+      // Vista dedicada de restablecimiento de contraseña (accesible con o sin sesión activa de recuperación)
+      {
+        element: <AuthLayout />,
+        children: [
+          {
+            path: ROUTES.RESET_PASSWORD,
+            element: <ResetPasswordPage />,
+          },
+        ],
+      },
+
       // Rutas Públicas de Invitado
       {
         element: <PublicRoute />,

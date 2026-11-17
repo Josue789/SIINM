@@ -8,8 +8,13 @@ import {
   getUserActiveStatusMap,
   saveUserActiveStatus,
   getCachedProfiles,
+  authService,
+  computeTempPasswordHash,
+  saveLocalTempPasswordHash,
+  setMustChangePasswordFlag,
 } from '@/services/supabase/auth.service'
 import type { PerfilUsuario, UserRole } from '@/types/auth.types'
+import { toast } from 'react-toastify'
 
 export type CreateUserDTO = {
   email: string
@@ -319,9 +324,14 @@ export const userRepository = {
     let passwordUpdatedRemotely = false
     let emailSent = false
 
-    // 1. Si se proporcionó clave temporal, intentar actualizar en Auth vía RPC o Edge Function
+    // 1. Si se proporcionó clave temporal, generar token de verificación y aplicar en Auth vía RPC o Edge Function
+    let verificationHash = ''
     if (params.tempPassword && params.tempPassword.trim().length >= 6) {
       const newPassword = params.tempPassword.trim()
+      verificationHash = await computeTempPasswordHash(cleanEmail, newPassword)
+      saveLocalTempPasswordHash(cleanEmail, verificationHash)
+      setMustChangePasswordFlag(cleanEmail, true)
+
       try {
         const { error: rpcError } = await supabase.rpc('admin_reset_user_password', {
           target_user_id: params.userId,
@@ -356,9 +366,14 @@ export const userRepository = {
       }
     }
 
-    // 2. Enviar correo oficial de recuperación de contraseña de Supabase Auth
+    // 2. Enviar correo oficial de recuperación de contraseña de Supabase Auth apuntando a /restablecer-contrasena
     if (params.sendEmail !== false && cleanEmail) {
-      const redirectTo = `${window.location.origin}/login`
+      const queryParams = new URLSearchParams()
+      queryParams.set('email', cleanEmail)
+      if (verificationHash) {
+        queryParams.set('v', verificationHash)
+      }
+      const redirectTo = `${window.location.origin}/restablecer-contrasena?${queryParams.toString()}`
       const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
         redirectTo,
       })
@@ -376,14 +391,23 @@ export const userRepository = {
    * Elimina un usuario de la tabla Perfil_usuarios por su ID.
    */
   async delete(id: string): Promise<void> {
-    const { error } = await supabase
+    // Elimina de la tabla de Perfil_usuarios
+    const { error: dbError } = await supabase
       .from('Perfil_usuarios')
       .delete()
       .eq('id', id)
 
-    if (error) {
-      console.error(`[userRepository] Error al eliminar usuario ${id}:`, error)
-      throw new Error(`Error al eliminar usuario: ${error.message}`)
+    if (dbError) {
+      toast.error(`[userRepository] Error al eliminar usuario ${id}:`)
+      throw new Error(`Error al eliminar usuario: ${dbError.message}`)
+    }
+
+    // Elimina de supabase auth
+    const {error: authError} = await authService.deleteUser(id);
+
+    if(authError){
+      toast.error(`[userRepository] Error al eliminar credenciales del usuario ${id}:`);
+      throw new Error(`Error al eliminar usuario: ${authError.message}`)
     }
   },
 

@@ -10,7 +10,7 @@ import { LoadingSpinner } from '../../components/common/LoadingSpinner'
  * guardando la URL intentada en el estado para volver a ella tras autenticarse.
  */
 export const ProtectedRoute: React.FC = () => {
-  const { isAuthenticated, isLoading } = useAuth()
+  const { isAuthenticated, user, isLoading } = useAuth()
   const location = useLocation()
 
   if (isLoading) {
@@ -20,6 +20,15 @@ export const ProtectedRoute: React.FC = () => {
   if (!isAuthenticated) {
     // Redirección a login preservando la ruta de origen
     return <Navigate to={ROUTES.LOGIN} state={{ from: location }} replace />
+  }
+
+  if (user?.mustChangePassword) {
+    return (
+      <Navigate
+        to={`${ROUTES.RESET_PASSWORD}?email=${encodeURIComponent(user.email || '')}`}
+        replace
+      />
+    )
   }
 
   return <Outlet />

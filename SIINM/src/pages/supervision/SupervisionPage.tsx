@@ -44,9 +44,68 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 
+type FilterMode = "todos" | "correctos" | "urgentes" | "criticos";
+
+const parseExpirationDate = (expirationDate?: string): number | null => {
+  if (!expirationDate || expirationDate === "N/A") return null;
+  const trimmed = expirationDate.trim();
+  if (!trimmed) return null;
+
+  if (trimmed.includes("/")) {
+    const parts = trimmed.split("/").map(Number);
+    if (parts.some(isNaN)) return null;
+
+    if (parts.length === 2) {
+      const m = parts[0];
+      const y = parts[1] < 100 ? parts[1] + 2000 : parts[1];
+      if (m < 1 || m > 12) return null;
+      return new Date(y, m, 0, 23, 59, 59, 999).getTime();
+    }
+
+    if (parts.length === 3) {
+      const d = parts[0];
+      const m = parts[1];
+      const y = parts[2] < 100 ? parts[2] + 2000 : parts[2];
+      if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+      return new Date(y, m - 1, d, 23, 59, 59, 999).getTime();
+    }
+  }
+
+  const isoMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  if (isoMatch) {
+    const y = Number(isoMatch[1]);
+    const m = Number(isoMatch[2]);
+    const d = Number(isoMatch[3]);
+    return new Date(y, m - 1, d, 23, 59, 59, 999).getTime();
+  }
+
+  const parsed = new Date(trimmed).getTime();
+  return isNaN(parsed) ? null : parsed;
+};
+
+const getExpiryFilterCategory = (
+  expirationDate?: string,
+  currentTimestamp = Date.now(),
+): "correctos" | "urgentes" | "criticos" | null => {
+  const expTime = parseExpirationDate(expirationDate);
+  if (expTime === null) return null;
+
+  const diffDays = (expTime - currentTimestamp) / (1000 * 60 * 60 * 24);
+
+  if (diffDays < 180) {
+    return "criticos";
+  }
+  if (diffDays <= 365) {
+    return "urgentes";
+  }
+  return "correctos";
+};
+
 export const SupervisionPage: React.FC = () => {
   const [selectedClinic, setSelectedClinic] = useState<number>(0);
   const [search, setSearch] = useState("");
+  const [filterMode, setFilterMode] = useState<FilterMode>("todos");
+  const [currentTimestamp] = useState(() => Date.now());
 
   const [clinicsData, setClinicsData] = useState<Clinica[]>([]);
   const [inventarios, setInventarios] = useState<InventarioItem[]>([]);
@@ -93,16 +152,41 @@ export const SupervisionPage: React.FC = () => {
     loadAllData();
   }, []);
 
-  const filteredData = inventarios.filter((item) => {
-    const searchMatch =
-      item.medicamento.toLowerCase().includes(search.toLowerCase()) ||
-      item.clave_ssa.toLowerCase().includes(search.toLowerCase()) ||
-      item.lote.toLowerCase().includes(search.toLowerCase());
-    const clinicMatch = selectedClinic
-      .toString()
-      .includes(item.id_clinica.toString());
-    return searchMatch && clinicMatch;
-  });
+  const filteredData = inventarios
+    .filter((item) => {
+      const medName = (item.medicamento || "").toLowerCase();
+      const ssaCode = (item.clave_ssa || "").toLowerCase();
+      const batchNum = (item.lote || "").toLowerCase();
+      const query = search.trim().toLowerCase();
+
+      const searchMatch =
+        !query ||
+        medName.includes(query) ||
+        ssaCode.includes(query) ||
+        batchNum.includes(query);
+
+      const clinicMatch =
+        selectedClinic === 0 ||
+        Number(item.id_clinica) === Number(selectedClinic);
+
+      if (!searchMatch || !clinicMatch) return false;
+
+      if (filterMode !== "todos") {
+        const category = getExpiryFilterCategory(
+          item.fecha_caducidad,
+          currentTimestamp,
+        );
+        return category === filterMode;
+      }
+
+      return true;
+    })
+    .sort((a, b) => {
+      // Ordenamiento FEFO (First Expired, First Out)
+      const timeA = parseExpirationDate(a.fecha_caducidad) ?? Number.MAX_SAFE_INTEGER;
+      const timeB = parseExpirationDate(b.fecha_caducidad) ?? Number.MAX_SAFE_INTEGER;
+      return timeA - timeB;
+    });
 
   // Paginación con @tanstack/react-table (useTable)
   const { table, paginatedData: paginatedData } = usePaginatedTable(
@@ -129,9 +213,10 @@ export const SupervisionPage: React.FC = () => {
   };
 
   const deleteMedicine = async () => {
+    if (!medicineToDelete?.id) return;
     setIsDeleting(true);
     try {
-      await inventarioRepository.delete(medicineToDelete!.id);
+      await inventarioRepository.delete(medicineToDelete.id);
       await fetchClinicsData();
       toast.success("Medicamento eliminado exitosamente");
       setMedicineToDelete(null);
@@ -151,45 +236,82 @@ export const SupervisionPage: React.FC = () => {
           Supervisión de Clínicas
         </h1>
         <p className="text-xs text-slate-500 mt-0.5">
-          Monitoreo consolidado de inventarios por unidad y clínica médica
+          Monitoreo consolidado de inventarios por unidad y clínica médica (Ordenamiento FEFO)
         </p>
       </div>
 
-      <Card className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-            Filtrar Medicamentos:
-          </span>
-          {pageLoad ? (
-            <Skeleton className="w-36 h-6 rounded-xl bg-slate-200" />
-          ) : (
-            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5">
-              <Building2 className="w-4 h-4 text-slate-400" />
+      <Card className="p-4 space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+              Unidad Médica:
+            </span>
+            {pageLoad ? (
+              <Skeleton className="w-36 h-6 rounded-xl bg-slate-200" />
+            ) : (
+              <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5">
+                <Building2 className="w-4 h-4 text-slate-400" />
 
-              <select
-                value={selectedClinic}
-                onChange={(e) => setSelectedClinic(Number(e.target.value))}
-                className="bg-transparent text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer"
-              >
-                {clinicsData.map((clinic) => (
-                  <option key={clinic.id} value={clinic.id}>
-                    {clinic.nombre}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+                <select
+                  value={selectedClinic}
+                  onChange={(e) => setSelectedClinic(Number(e.target.value))}
+                  className="bg-transparent text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer"
+                >
+                  {clinicsData.map((clinic) => (
+                    <option key={clinic.id} value={clinic.id}>
+                      {clinic.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+
+          <div className="relative w-full md:w-72">
+            <Input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar medicamento, clave o lote..."
+              className="pr-9 h-9 text-xs"
+            />
+            <Search className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          </div>
         </div>
 
-        <div className="relative w-full md:w-72">
-          <Input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar medicamento..."
-            className="pr-9 h-9 text-xs"
-          />
-          <Search className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+        {/* Filtros de caducidad FEFO */}
+        <div className="flex items-center gap-2 flex-wrap pt-3 border-t border-slate-100">
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-2">
+            Semáforo FEFO:
+          </span>
+          <Button
+            size="sm"
+            variant={filterMode === "todos" ? "default" : "secondary"}
+            onClick={() => setFilterMode("todos")}
+          >
+            Todos
+          </Button>
+          <Button
+            size="sm"
+            variant={filterMode === "correctos" ? "default" : "secondary"}
+            onClick={() => setFilterMode("correctos")}
+          >
+            Correctos (&gt; 12 meses)
+          </Button>
+          <Button
+            size="sm"
+            variant={filterMode === "urgentes" ? "default" : "secondary"}
+            onClick={() => setFilterMode("urgentes")}
+          >
+            Urgentes (6 - 12 meses)
+          </Button>
+          <Button
+            size="sm"
+            variant={filterMode === "criticos" ? "default" : "secondary"}
+            onClick={() => setFilterMode("criticos")}
+          >
+            Críticos (&lt; 6 meses)
+          </Button>
         </div>
       </Card>
 
@@ -242,7 +364,13 @@ export const SupervisionPage: React.FC = () => {
                 </TableCell>
               </TableRow>
             ) : (
-              paginatedData.map((item) => (
+              paginatedData.map((item) => {
+                const expiryCategory = getExpiryFilterCategory(
+                  item.fecha_caducidad,
+                  currentTimestamp,
+                );
+                const itemIdStr = String(item.id ?? "");
+                return (
                 <TableRow key={item.id} className="border-0">
                   <TableCell className="font-mono font-medium text-slate-700">
                     {item.clave_ssa}
@@ -256,20 +384,20 @@ export const SupervisionPage: React.FC = () => {
                   <TableCell className="font-bold">
                     <Badge
                       variant={
-                        new Date(item.fecha_caducidad) <=
-                        new Date(Date.now() + 90 * 24 * 60 * 60 * 1000)
+                        expiryCategory === "criticos"
                           ? "destructive"
-                          : new Date(item.fecha_caducidad) <=
-                              new Date(Date.now() + 180 * 24 * 60 * 60 * 1000)
+                          : expiryCategory === "urgentes"
                             ? "warning"
-                            : "default"
+                            : expiryCategory === "correctos"
+                              ? "success"
+                              : "secondary"
                       }
                     >
-                      {item.fecha_caducidad}
+                      {item.fecha_caducidad || "N/A"}
                     </Badge>
                   </TableCell>
                   <TableCell className="font-bold text-slate-800">
-                    {idToEdit === item.id.toString() ? (
+                    {idToEdit === itemIdStr ? (
                       <div className="flex flex-row items-center space-x-2">
                         <Input
                           type="number"
@@ -321,7 +449,7 @@ export const SupervisionPage: React.FC = () => {
                         <DropdownMenuItem
                           onClick={() => {
                             setStock(item.stock);
-                            setIdToEdit(item.id.toString());
+                            setIdToEdit(itemIdStr);
                           }}
                           className="cursor-pointer dark:text-gray-800 hover:bg-gray-200 p-2 text-xs flex items-center"
                         >
@@ -342,7 +470,8 @@ export const SupervisionPage: React.FC = () => {
                     </DropdownMenu>
                   </TableCell>
                 </TableRow>
-              ))
+                );
+              })
             )}
           </TableBody>
         </Table>

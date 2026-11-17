@@ -4,6 +4,7 @@
 export const ROUTES = {
   // Rutas públicas / Auth
   LOGIN: '/login',
+  RESET_PASSWORD: '/restablecer-contrasena',
 
   // Rutas protegidas (Figma)
   ROOT: '/',

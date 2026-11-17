@@ -403,8 +403,9 @@ export const SupplyEntryPage: React.FC = () => {
                 min="1"
                 value={quantityPerPiece}
                 onChange={(e) => {
-                  if (Number(e.target.value) >= 0)
-                    setQuantityPerPiece(e.target.value);
+                  const value = e.target.value;
+                  if (/^[0-9]*$/.test(value) && Number(value) > 0)
+                    setQuantityPerPiece(value);
                 }}
                 required
               />
@@ -430,7 +431,12 @@ export const SupplyEntryPage: React.FC = () => {
               <Input
                 type="text"
                 value={lotNumber}
-                onChange={(e) => setLotNumber(e.target.value.toUpperCase())}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if(/^[A-Za-z0-9]*$/.test(value)){
+                    setLotNumber(value.toUpperCase())
+                  }
+                }}
                 placeholder="Ej. AH224"
                 required
               />
@@ -457,7 +463,7 @@ export const SupplyEntryPage: React.FC = () => {
             No hay insumos pendientes de ingresar. Llena el formulario superior.
           </div>
         ) : (
-          <ScrollArea className="flex-1 h-[calc(100vh-39rem)]" type="auto">
+          <ScrollArea className="flex-1 h-[calc(100vh-25rem)]" type="auto">
             {incomingItems.map((item) => (
               <div
                 key={item.id}

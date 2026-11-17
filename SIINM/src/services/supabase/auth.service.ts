@@ -6,7 +6,88 @@ const CACHED_CLINICAS_KEY = 'siinm_cached_clinicas'
 const CACHED_USER_STATUS_KEY = 'siinm_user_active_status'
 const OFFLINE_AUTH_RECORDS_KEY = 'siinm_offline_auth_records_v1'
 const ACTIVE_OFFLINE_SESSION_KEY = 'siinm_active_offline_session_v1'
+const TEMP_PASSWORD_HASHES_KEY = 'siinm_temp_password_hashes_v1'
+const MUST_CHANGE_PASSWORD_KEY = 'siinm_must_change_password_v1'
 const OFFLINE_INTEGRITY_SECRET = 'SIINM_OFFLINE_AUTH_INTEGRITY_2026_V1'
+
+export function setMustChangePasswordFlag(email: string, mustChange: boolean): void {
+  if (!email) return
+  try {
+    const raw = localStorage.getItem(MUST_CHANGE_PASSWORD_KEY)
+    const map: Record<string, boolean> = raw ? JSON.parse(raw) : {}
+    const key = email.trim().toLowerCase()
+    if (mustChange) {
+      map[key] = true
+    } else {
+      delete map[key]
+    }
+    localStorage.setItem(MUST_CHANGE_PASSWORD_KEY, JSON.stringify(map))
+  } catch {
+    // ignore storage errors
+  }
+}
+
+export function getMustChangePasswordFlag(email?: string): boolean {
+  if (!email) return false
+  try {
+    const raw = localStorage.getItem(MUST_CHANGE_PASSWORD_KEY)
+    if (!raw) return false
+    const map: Record<string, boolean> = JSON.parse(raw)
+    return Boolean(map[email.trim().toLowerCase()])
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Calcula un hash SHA-256 determinístico para validar una clave temporal asociada a un correo.
+ */
+export async function computeTempPasswordHash(email: string, tempPassword: string): Promise<string> {
+  const cleanEmail = email.trim().toLowerCase()
+  const cleanPass = tempPassword.trim()
+  const fullHash = await sha256Hex(`${OFFLINE_INTEGRITY_SECRET}:temp_pwd:${cleanEmail}:${cleanPass}`)
+  return fullHash.slice(0, 32)
+}
+
+export function saveLocalTempPasswordHash(email: string, hash: string): void {
+  try {
+    const raw = localStorage.getItem(TEMP_PASSWORD_HASHES_KEY)
+    const map: Record<string, { hash: string; createdAt: number }> = raw ? JSON.parse(raw) : {}
+    map[email.trim().toLowerCase()] = { hash, createdAt: Date.now() }
+    localStorage.setItem(TEMP_PASSWORD_HASHES_KEY, JSON.stringify(map))
+  } catch {
+    // ignore storage errors
+  }
+}
+
+export function getLocalTempPasswordHash(email?: string): string | null {
+  if (!email) return null
+  try {
+    const raw = localStorage.getItem(TEMP_PASSWORD_HASHES_KEY)
+    if (!raw) return null
+    const map: Record<string, { hash: string; createdAt: number }> = JSON.parse(raw)
+    const entry = map[email.trim().toLowerCase()]
+    if (!entry) return null
+    // Expira en 48 horas
+    if (Date.now() - entry.createdAt > 48 * 60 * 60 * 1000) return null
+    return entry.hash
+  } catch {
+    return null
+  }
+}
+
+export function clearLocalTempPasswordHash(email?: string): void {
+  if (!email) return
+  try {
+    const raw = localStorage.getItem(TEMP_PASSWORD_HASHES_KEY)
+    if (!raw) return
+    const map: Record<string, { hash: string; createdAt: number }> = JSON.parse(raw)
+    delete map[email.trim().toLowerCase()]
+    localStorage.setItem(TEMP_PASSWORD_HASHES_KEY, JSON.stringify(map))
+  } catch {
+    // ignore
+  }
+}
 
 /**
  * Tiempo de vigencia para permitir inicio de sesión offline antes de obligar
@@ -609,6 +690,8 @@ export const authService = {
         sbUser.clinicaNombre ||
         cachedClinicaNombre,
       activo,
+      mustChangePassword:
+        Boolean(meta.must_change_password) || getMustChangePasswordFlag(emailStr),
     }
   },
 
@@ -864,8 +947,33 @@ export const authService = {
       }
 
       const sbUser = data.user
+      const cleanEmail = (sbUser.email || email).trim()
+      const cleanPass = password.trim()
+
+      // Detectar si el usuario inició sesión utilizando una clave temporal
+      const localTempHash = getLocalTempPasswordHash(cleanEmail)
+      const enteredHash = localTempHash
+        ? await computeTempPasswordHash(cleanEmail, cleanPass)
+        : ''
+      const usedTemporaryPassword =
+        cleanPass.startsWith('Siinm-') ||
+        (Boolean(localTempHash) && enteredHash === localTempHash) ||
+        Boolean(sbUser.user_metadata?.must_change_password)
+
+      if (usedTemporaryPassword) {
+        setMustChangePasswordFlag(cleanEmail, true)
+        await supabase.auth
+          .updateUser({
+            data: { must_change_password: true },
+          })
+          .catch(() => null)
+      }
+
       const profile = await this.getUserProfile(sbUser.id, sbUser.email, sbUser.user_metadata)
       const user = this.buildUser(sbUser, profile)
+      if (usedTemporaryPassword) {
+        user.mustChangePassword = true
+      }
 
       if (user.activo === false) {
         revokeOfflineAuthRecord(user.email)
@@ -925,7 +1033,7 @@ export const authService = {
    */
   async sendPasswordResetEmail(email: string): Promise<{ error: Error | null }> {
     try {
-      const redirectTo = `${window.location.origin}/login`
+      const redirectTo = `${window.location.origin}/restablecer-contrasena`
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
         redirectTo,
       })
@@ -941,23 +1049,29 @@ export const authService = {
   },
 
   /**
-   * Actualiza la contraseña del usuario actualmente autenticado (ej. tras clic en enlace de correo).
+   * Actualiza la contraseña del usuario actualmente autenticado (ej. tras clic en enlace de correo o con clave temporal).
    */
   async updateOwnPassword(newPassword: string): Promise<{ error: Error | null }> {
     try {
       const { data, error } = await supabase.auth.updateUser({
         password: newPassword,
+        data: { must_change_password: false },
       })
       if (error) {
         return { error: new Error(error.message) }
       }
       if (data.user) {
+        if (data.user.email) {
+          setMustChangePasswordFlag(data.user.email, false)
+          clearLocalTempPasswordHash(data.user.email)
+        }
         const profile = await this.getUserProfile(
           data.user.id,
           data.user.email,
           data.user.user_metadata
         )
         const built = this.buildUser(data.user, profile)
+        built.mustChangePassword = false
         await saveOfflineAuthRecordOnOnlineLogin(built, newPassword)
       }
       return { error: null }
@@ -965,6 +1079,23 @@ export const authService = {
       return {
         error: err instanceof Error ? err : new Error('Error al actualizar la contraseña'),
       }
+    }
+  },
+
+  /**
+   * Elimina un usuario directamente en Supabase Auth
+   */
+  async deleteUser(id: string): Promise<{error:Error | null}>{
+    try{
+      const {error} = await supabase.functions.invoke('delete-user',{
+        body:{userId: id},
+      })
+
+      if(error) throw error;
+
+      return {error: null};
+    }catch (error){
+      return {error: error as Error};
     }
   },
 

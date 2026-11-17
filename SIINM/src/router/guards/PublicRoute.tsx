@@ -10,11 +10,29 @@ import { LoadingSpinner } from '../../components/common/LoadingSpinner'
  * o a la página que intentaba visitar previamente.
  */
 export const PublicRoute: React.FC = () => {
-  const { isAuthenticated, isLoading } = useAuth()
+  const { isAuthenticated, user, isLoading } = useAuth()
   const location = useLocation()
 
   if (isLoading) {
     return <LoadingSpinner message="Comprobando credenciales..." />
+  }
+
+  if (typeof window !== 'undefined' && window.location.hash.includes('type=recovery')) {
+    return (
+      <Navigate
+        to={`${ROUTES.RESET_PASSWORD}${window.location.search}${window.location.hash}`}
+        replace
+      />
+    )
+  }
+
+  if (isAuthenticated && user?.mustChangePassword) {
+    return (
+      <Navigate
+        to={`${ROUTES.RESET_PASSWORD}?email=${encodeURIComponent(user.email || '')}`}
+        replace
+      />
+    )
   }
 
   if (isAuthenticated) {

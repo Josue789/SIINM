@@ -22,6 +22,15 @@ export const AdminRoute: React.FC = () => {
     return <Navigate to={ROUTES.LOGIN} state={{ from: location }} replace />;
   }
 
+  if (user?.mustChangePassword) {
+    return (
+      <Navigate
+        to={`${ROUTES.RESET_PASSWORD}?email=${encodeURIComponent(user.email || "")}`}
+        replace
+      />
+    );
+  }
+
   if (user?.role !== "admin") {
     // Redirección a catalogos para evitar bucles infinitos
     return (

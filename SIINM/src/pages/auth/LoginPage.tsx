@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
-import { LogIn, Key, Mail, Eye, EyeOff, WifiOff } from "lucide-react";
+import { useNavigate, useLocation, Link } from "react-router-dom";
+import { LogIn, Key, Mail, Eye, EyeOff, WifiOff, KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "../../context/AuthContext";
 import { useNetwork } from "../../context/NetworkContext";
@@ -53,6 +53,16 @@ export const LoginPage: React.FC = () => {
     if (result.success) {
       reset();
       setTries(0);
+      if (credentials.password.trim().startsWith("Siinm-")) {
+        toast.info(
+          "Ingresaste con una clave temporal. Por seguridad, establece tu nueva contraseña.",
+        );
+        navigate(
+          `${ROUTES.RESET_PASSWORD}?email=${encodeURIComponent(credentials.email.trim())}`,
+          { replace: true },
+        );
+        return;
+      }
       if (!isOnline) {
         toast.info("Sesión iniciada en modo sin conexión (Offline).");
       }
@@ -166,6 +176,16 @@ export const LoginPage: React.FC = () => {
             </>
           )}
         </Button>
+
+        <div className="pt-2 text-center">
+          <Link
+            to={ROUTES.RESET_PASSWORD}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 transition-colors"
+          >
+            <KeyRound className="w-3.5 h-3.5" />
+            <span>¿Recibiste una clave temporal? Cambiar contraseña</span>
+          </Link>
+        </div>
       </form>
     </div>
   );

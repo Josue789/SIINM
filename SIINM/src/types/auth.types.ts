@@ -8,6 +8,7 @@ export interface User {
   clinicaId?: number | null
   clinicaNombre?: string
   activo?: boolean
+  mustChangePassword?: boolean
 }
 
 export interface PerfilUsuario {

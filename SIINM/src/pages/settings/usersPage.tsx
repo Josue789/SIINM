@@ -702,37 +702,42 @@ export const UsersPage: React.FC = () => {
               if (!open) setUserForPassword(null);
             }}
           >
-            <DialogContent className="w-full">
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <KeyRound className="w-5 h-5 text-blue-600" />
-                  <span>Cambiar / Restablecer Contraseña</span>
+            <DialogContent className="w-[calc(100vw-2rem)] max-w-md overflow-hidden p-5 sm:p-6">
+              <DialogHeader className="min-w-0 pr-6">
+                <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
+                  <KeyRound className="w-5 h-5 text-blue-600 shrink-0" />
+                  <span className="truncate">
+                    Cambiar / Restablecer Contraseña
+                  </span>
                 </DialogTitle>
-                <DialogDescription>
-                  Genera una clave temporal y envía el correo de recuperación de
-                  contraseña mediante Supabase Auth para{" "}
-                  <strong>{userForPassword?.nombre}</strong> (
-                  {userForPassword?.email}).
+                <DialogDescription className="text-xs leading-relaxed break-words">
+                  Genera una clave temporal de seguridad y envía el enlace de
+                  restablecimiento a{" "}
+                  <strong className="text-slate-700">
+                    {userForPassword?.nombre}
+                  </strong>{" "}
+                  (<span className="break-all">{userForPassword?.email}</span>).
                 </DialogDescription>
               </DialogHeader>
 
-              <div className="space-y-4 py-2 ">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Clave Temporal Generada (mín. 8 caracteres)
+              <div className="space-y-3 py-2 min-w-0">
+                <div className="min-w-0">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Clave Temporal de Seguridad (mín. 8 caracteres)
                   </label>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
                     <Input
                       type="text"
                       value={tempPassword}
                       onChange={(e) => setTempPassword(e.target.value)}
-                      className="font-mono text-sm font-bold tracking-wider"
+                      className="font-mono text-sm font-bold tracking-wider min-w-0 flex-1"
                     />
                     <Button
                       type="button"
                       variant="outline"
                       size="icon"
                       onClick={regenerateTempPassword}
+                      className="shrink-0"
                       title="Generar otra clave temporal"
                     >
                       <RefreshCw className="w-4 h-4" />
@@ -742,53 +747,61 @@ export const UsersPage: React.FC = () => {
                       variant="outline"
                       size="icon"
                       onClick={() => oncopy(tempPassword)}
+                      className="shrink-0"
                       title="Copiar clave temporal"
                     >
                       <Copy className="w-4 h-4" />
                     </Button>
                   </div>
-                  <p className="text-[11px] text-slate-500 mt-1.5">
-                    Al enviar, Supabase mandará un enlace al correo{" "}
-                    <strong>{userForPassword?.email}</strong> para que el
-                    usuario establezca su contraseña (y la clave temporal se
-                    copiará a tu portapapeles).
+                  <p className="text-[11px] text-slate-500 mt-2 leading-relaxed break-words">
+                    Al enviar, el usuario recibirá un correo con enlace a la
+                    vista de cambio de contraseña (
+                    <code className="text-[10px] bg-slate-100 px-1 py-0.5 rounded">
+                      /restablecer-contrasena
+                    </code>
+                    ), donde se le solicitará esta{" "}
+                    <strong>clave temporal</strong> como validación de seguridad
+                    antes de guardar su nueva contraseña.
                   </p>
                 </div>
               </div>
 
-              <DialogFooter className="flex flex-col sm:flex-row gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setIsPasswordDialogOpen(false);
-                    setUserForPassword(null);
-                  }}
-                  disabled={isResettingPassword}
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => handlePasswordReset(false)}
-                  disabled={isResettingPassword}
-                  className="gap-1.5"
-                >
-                  <Mail className="w-3.5 h-3.5" />
-                  <span>Solo enviar correo</span>
-                </Button>
+              <DialogFooter className="flex flex-col-reverse sm:flex-col gap-2 sm:space-x-0 pt-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setIsPasswordDialogOpen(false);
+                      setUserForPassword(null);
+                    }}
+                    disabled={isResettingPassword}
+                    className="w-full text-xs"
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => handlePasswordReset(false)}
+                    disabled={isResettingPassword}
+                    className="w-full gap-1.5 text-xs"
+                  >
+                    <Mail className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">Solo enviar correo</span>
+                  </Button>
+                </div>
                 <Button
                   type="button"
                   onClick={() => handlePasswordReset(true)}
                   disabled={isResettingPassword}
-                  className="gap-1.5"
+                  className="w-full gap-1.5 text-xs h-10"
                 >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>
+                  <Send className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">
                     {isResettingPassword
                       ? "Enviando..."
-                      : "Generar clave y enviar correo"}
+                      : "Vincular clave temporal y enviar correo"}
                   </span>
                 </Button>
               </DialogFooter>

@@ -52,16 +52,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<AuthSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isRecoveryOpen, setIsRecoveryOpen] = useState(() =>
-    typeof window !== "undefined" &&
-    window.location.hash.includes("type=recovery"),
-  );
+  const [isRecoveryOpen, setIsRecoveryOpen] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
+
+    if (
+      typeof window !== "undefined" &&
+      window.location.hash.includes("type=recovery") &&
+      !window.location.pathname.includes("/restablecer-contrasena")
+    ) {
+      window.location.replace(
+        `/restablecer-contrasena${window.location.search}${window.location.hash}`,
+      );
+      return;
+    }
 
     // 1. Obtener la sesión real actual guardada por el cliente de Supabase
     authService
@@ -88,7 +96,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     } = supabase.auth.onAuthStateChange((event, sbSession) => {
       if (!isMounted) return;
       if (event === "PASSWORD_RECOVERY") {
-        setIsRecoveryOpen(true);
+        if (
+          typeof window !== "undefined" &&
+          !window.location.pathname.includes("/restablecer-contrasena")
+        ) {
+          window.location.replace(
+            `/restablecer-contrasena${window.location.search}${window.location.hash}`,
+          );
+          return;
+        }
       }
       if (!sbSession) {
         if (event === "SIGNED_OUT") {
@@ -297,7 +313,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           prev.fullName === updatedUser.fullName &&
           prev.role === updatedUser.role &&
           prev.clinicaId === updatedUser.clinicaId &&
-          prev.clinicaNombre === updatedUser.clinicaNombre
+          prev.clinicaNombre === updatedUser.clinicaNombre &&
+          prev.mustChangePassword === updatedUser.mustChangePassword
         ) {
           return prev;
         }

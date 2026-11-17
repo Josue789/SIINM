@@ -250,29 +250,38 @@ export const InventoryPage: React.FC = () => {
   const filteredMedicines = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
-    return (inventoryItems || []).filter((m) => {
-      const medName = (m.medicamento || "").toLowerCase();
-      const ssaCode = (m.clave_ssa || "").toLowerCase();
-      const batchNum = (m.lote || "").toLowerCase();
+    return (inventoryItems || [])
+      .filter((m) => {
+        const medName = (m.medicamento || "").toLowerCase();
+        const ssaCode = (m.clave_ssa || "").toLowerCase();
+        const batchNum = (m.lote || "").toLowerCase();
 
-      const matchesSearch =
-        !query ||
-        medName.includes(query) ||
-        ssaCode.includes(query) ||
-        batchNum.includes(query);
+        const matchesSearch =
+          !query ||
+          medName.includes(query) ||
+          ssaCode.includes(query) ||
+          batchNum.includes(query);
 
-      if (!matchesSearch) return false;
+        if (!matchesSearch) return false;
 
-      if (filterMode !== "todos") {
-        const category = getExpiryFilterCategory(
-          m.fecha_caducidad,
-          currentTimestamp,
-        );
-        return category === filterMode;
-      }
+        if (filterMode !== "todos") {
+          const category = getExpiryFilterCategory(
+            m.fecha_caducidad,
+            currentTimestamp,
+          );
+          return category === filterMode;
+        }
 
-      return true;
-    });
+        return true;
+      })
+      .sort((a, b) => {
+        // Ordenamiento FEFO (First Expired, First Out)
+        const timeA =
+          parseExpirationDate(a.fecha_caducidad) ?? Number.MAX_SAFE_INTEGER;
+        const timeB =
+          parseExpirationDate(b.fecha_caducidad) ?? Number.MAX_SAFE_INTEGER;
+        return timeA - timeB;
+      });
   }, [inventoryItems, searchQuery, filterMode, currentTimestamp]);
 
   // Paginación con @tanstack/react-table (useTable)
