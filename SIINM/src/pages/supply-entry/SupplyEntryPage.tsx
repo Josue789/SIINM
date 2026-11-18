@@ -287,7 +287,7 @@ export const SupplyEntryPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto max-h-screen">
+    <div className="space-y-6 max-w-5xl mx-auto">
       <div>
         <h1 className="text-xl md:text-2xl font-black text-slate-800 tracking-wide uppercase m-0">
           Entrada de Insumos
@@ -433,8 +433,8 @@ export const SupplyEntryPage: React.FC = () => {
                 value={lotNumber}
                 onChange={(e) => {
                   const value = e.target.value;
-                  if(/^[A-Za-z0-9]*$/.test(value)){
-                    setLotNumber(value.toUpperCase())
+                  if (/^[A-Za-z0-9]*$/.test(value)) {
+                    setLotNumber(value.toUpperCase());
                   }
                 }}
                 placeholder="Ej. AH224"
@@ -463,51 +463,56 @@ export const SupplyEntryPage: React.FC = () => {
             No hay insumos pendientes de ingresar. Llena el formulario superior.
           </div>
         ) : (
-          <ScrollArea className="flex-1 h-[calc(100vh-25rem)]" type="auto">
-            {incomingItems.map((item) => (
-              <div
-                key={item.id}
-                className="m-3 bg-[#fffdf5] border border-amber-200/70 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs"
-              >
-                <div>
-                  <h3 className="text-sm font-bold text-slate-800 m-0">
-                    {item.name}
-                  </h3>
-                  <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-slate-500">
-                    <span>
-                      SSA:{" "}
-                      <strong className="text-slate-700 font-mono">
-                        {item.ssa}
-                      </strong>
-                    </span>
-                    <span>•</span>
-                    <span>
-                      CANTIDAD:{" "}
-                      <strong className="text-slate-700">
-                        {item.quantity} piezas
-                      </strong>
-                    </span>
+          <ScrollArea
+            className="w-full max-h-80 sm:max-h-96 rounded-2xl border border-slate-200/70 bg-white/40 p-2"
+            type="auto"
+          >
+            <div className="space-y-2.5 pr-2">
+              {incomingItems.map((item) => (
+                <div
+                  key={item.id}
+                  className="bg-[#fffdf5] border border-amber-200/70 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs"
+                >
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-800 m-0">
+                      {item.name}
+                    </h3>
+                    <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-slate-500">
+                      <span>
+                        SSA:{" "}
+                        <strong className="text-slate-700 font-mono">
+                          {item.ssa}
+                        </strong>
+                      </span>
+                      <span>•</span>
+                      <span>
+                        CANTIDAD:{" "}
+                        <strong className="text-slate-700">
+                          {item.quantity} piezas
+                        </strong>
+                      </span>
+                    </div>
+                    <div className="mt-1 text-xs text-amber-800 font-medium">
+                      LOTE Y CADUCIDAD:{" "}
+                      <span className="font-mono">{item.lote}</span> | Cad:{" "}
+                      {item.caducidad}
+                    </div>
                   </div>
-                  <div className="mt-1 text-xs text-amber-800 font-medium">
-                    LOTE Y CADUCIDAD:{" "}
-                    <span className="font-mono">{item.lote}</span> | Cad:{" "}
-                    {item.caducidad}
-                  </div>
-                </div>
 
-                <div className="flex items-center gap-3 shrink-0 self-end md:self-auto">
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => handleRemove(item.id)}
-                    title="Eliminar insumo"
-                    className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+                  <div className="flex items-center gap-3 shrink-0 self-end md:self-auto">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => handleRemove(item.id)}
+                      title="Eliminar insumo"
+                      className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </ScrollArea>
         )}
       </div>

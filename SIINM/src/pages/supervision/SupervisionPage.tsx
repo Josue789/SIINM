@@ -5,8 +5,9 @@ import {
   MoreVertical,
   Pencil,
   Trash2,
-  Save,
   LoaderCircle,
+  X,
+  Check,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -43,6 +44,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 
 type FilterMode = "todos" | "correctos" | "urgentes" | "criticos";
 
@@ -183,8 +189,10 @@ export const SupervisionPage: React.FC = () => {
     })
     .sort((a, b) => {
       // Ordenamiento FEFO (First Expired, First Out)
-      const timeA = parseExpirationDate(a.fecha_caducidad) ?? Number.MAX_SAFE_INTEGER;
-      const timeB = parseExpirationDate(b.fecha_caducidad) ?? Number.MAX_SAFE_INTEGER;
+      const timeA =
+        parseExpirationDate(a.fecha_caducidad) ?? Number.MAX_SAFE_INTEGER;
+      const timeB =
+        parseExpirationDate(b.fecha_caducidad) ?? Number.MAX_SAFE_INTEGER;
       return timeA - timeB;
     });
 
@@ -236,7 +244,8 @@ export const SupervisionPage: React.FC = () => {
           Supervisión de Clínicas
         </h1>
         <p className="text-xs text-slate-500 mt-0.5">
-          Monitoreo consolidado de inventarios por unidad y clínica médica (Ordenamiento FEFO)
+          Monitoreo consolidado de inventarios por unidad y clínica médica
+          (Ordenamiento FEFO)
         </p>
       </div>
 
@@ -371,105 +380,107 @@ export const SupervisionPage: React.FC = () => {
                 );
                 const itemIdStr = String(item.id ?? "");
                 return (
-                <TableRow key={item.id} className="border-0">
-                  <TableCell className="font-mono font-medium text-slate-700">
-                    {item.clave_ssa}
-                  </TableCell>
-                  <TableCell className="font-semibold text-slate-800">
-                    {item.medicamento}
-                  </TableCell>
-                  <TableCell className="font-mono text-slate-600">
-                    {item.lote}
-                  </TableCell>
-                  <TableCell className="font-bold">
-                    <Badge
-                      variant={
-                        expiryCategory === "criticos"
-                          ? "destructive"
-                          : expiryCategory === "urgentes"
-                            ? "warning"
-                            : expiryCategory === "correctos"
-                              ? "success"
-                              : "secondary"
-                      }
-                    >
-                      {item.fecha_caducidad || "N/A"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="font-bold text-slate-800">
-                    {idToEdit === itemIdStr ? (
-                      <div className="flex flex-row items-center space-x-2">
-                        <Input
-                          type="number"
-                          value={stock}
-                          onChange={(e) => {
-                            const value = Number(e.target.value);
-                            setStock(value >= 0 ? value : 0);
-                          }}
-                          className="w-42"
-                        />
-                        <Button
-                          className="hover:border-red-700 hover:text-red-700 hover:bg-red-200"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setIdToEdit("")}
-                        >
-                          Cancelar
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => saveChanges()}
-                          className="hover:bg-green-200 hover:text-green-700"
-                          disabled={isUpdating}
-                        >
-                          {isUpdating ? (
-                            <LoaderCircle className="animate-spin" />
-                          ) : (
-                            <Save className="" />
-                          )}
-                        </Button>
-                      </div>
-                    ) : (
-                      item.stock
-                    )}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8 text-slate-400 hover:text-slate-600"
-                        >
-                          <MoreVertical className="w-4 h-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent className="dark:bg-white dark:border-gray-200 ">
-                        <DropdownMenuItem
-                          onClick={() => {
-                            setStock(item.stock);
-                            setIdToEdit(itemIdStr);
-                          }}
-                          className="cursor-pointer dark:text-gray-800 hover:bg-gray-200 p-2 text-xs flex items-center"
-                        >
-                          <Pencil className="w-4 h-4 mr-2 " />
-                          Ajustar Cantidad
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => {
-                            setOpenDialog(true);
-                            setMedicineToDelete(item);
-                          }}
-                          className="cursor-pointer dark:text-red-600 hover:bg-gray-200 p-2 text-xs flex items-center text-red-600"
-                        >
-                          <Trash2 className="w-4 h-4 mr-2 " />
-                          Eliminar
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
+                  <TableRow key={item.id} className="border-0">
+                    <TableCell className="font-mono font-medium text-slate-700">
+                      {item.clave_ssa}
+                    </TableCell>
+                    <TableCell className="font-semibold text-slate-800">
+                      {item.medicamento}
+                    </TableCell>
+                    <TableCell className="font-mono text-slate-600">
+                      {item.lote}
+                    </TableCell>
+                    <TableCell className="font-bold">
+                      <Badge
+                        variant={
+                          expiryCategory === "criticos"
+                            ? "destructive"
+                            : expiryCategory === "urgentes"
+                              ? "warning"
+                              : expiryCategory === "correctos"
+                                ? "success"
+                                : "secondary"
+                        }
+                      >
+                        {item.fecha_caducidad || "N/A"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="font-bold text-slate-800">
+                      {idToEdit === itemIdStr ? (
+                        <div className="flex flex-row items-center space-x-2">
+                          <InputGroup>
+                            <InputGroupInput
+                              type="number"
+                              value={stock}
+                              onChange={(e) => {
+                                const value = Number(e.target.value);
+                                setStock(value >= 0 ? value : 0);
+                              }}
+                              className="w-42"
+                            />
+                            <InputGroupAddon align="inline-end">
+                              {isUpdating ? (
+                                <LoaderCircle className="animate-spin" />
+                              ) : (
+                                <Button
+                                  onClick={() => saveChanges()}
+                                  disabled={isUpdating}
+                                  variant="ghost"
+                                  className="h-min w-min p-2 hover:text-green-700 hover:bg-green-100 hover:cursor-pointer"
+                                >
+                                  <Check className="h-5 w-5" />
+                                </Button>
+                              )}
+                            </InputGroupAddon>
+                          </InputGroup>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => setIdToEdit("")}
+                          >
+                            <X />
+                          </Button>
+                        </div>
+                      ) : (
+                        item.stock
+                      )}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 text-slate-400 hover:text-slate-600"
+                          >
+                            <MoreVertical className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="dark:bg-white dark:border-gray-200 ">
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setStock(item.stock);
+                              setIdToEdit(itemIdStr);
+                            }}
+                            className="cursor-pointer dark:text-gray-800 hover:bg-gray-200 p-2 text-xs flex items-center"
+                          >
+                            <Pencil className="w-4 h-4 mr-2 " />
+                            Ajustar Cantidad
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setOpenDialog(true);
+                              setMedicineToDelete(item);
+                            }}
+                            className="cursor-pointer dark:text-red-600 hover:bg-gray-200 p-2 text-xs flex items-center text-red-600"
+                          >
+                            <Trash2 className="w-4 h-4 mr-2 " />
+                            Eliminar
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
                 );
               })
             )}

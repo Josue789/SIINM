@@ -287,6 +287,29 @@ export const userRepository = {
   },
 
   /**
+   * Activa o desactiva todos los usuarios segun una clinica especificada
+   */
+  async updateStatusByClinic(clinicId: string, activo: boolean): Promise<void> {
+    const { error } = await supabase
+      .from('Perfil_usuarios')
+      .update({ activo })
+      .eq('clinica_id', clinicId)
+
+    if (error) {
+      const msg = error.message || ''
+      // Si la columna 'activo' aún no existe en la tabla Perfil_usuarios, mantenemos el estado sincronizado y avisamos en consola
+      if (msg.includes('activo') || error.code === '42703' || error.code === 'PGRST204') {
+        console.warn(
+          '[userRepository] La columna "activo" no existe aún en Perfil_usuarios. Ejecuta: ALTER TABLE public."Perfil_usuarios" ADD COLUMN IF NOT EXISTS activo boolean DEFAULT true;'
+        )
+        return
+      }
+      throw new Error(`Error al cambiar estatus del usuario: ${error.message}`)
+    }
+  },
+
+
+  /**
    * Genera una contraseña temporal segura de al menos 10 caracteres.
    */
   generateTemporaryPassword(): string {

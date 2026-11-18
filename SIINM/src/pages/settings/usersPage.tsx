@@ -124,12 +124,11 @@ export const UsersPage: React.FC = () => {
       setLoading(true);
       const [usersData, clinicasData] = await Promise.all([
         userRepository.getAll(),
-        clinicaRepository.getAll(),
+        clinicaRepository.getAll({ onlyActive: true }),
       ]);
 
       setUsers(usersData);
       setClinicas(clinicasData);
-      console.log(clinicasData);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Error al cargar datos";
       toast.error(msg);
@@ -710,7 +709,7 @@ export const UsersPage: React.FC = () => {
                     Cambiar / Restablecer Contraseña
                   </span>
                 </DialogTitle>
-                <DialogDescription className="text-xs leading-relaxed break-words">
+                <DialogDescription className="text-xs leading-relaxed wrap-break">
                   Genera una clave temporal de seguridad y envía el enlace de
                   restablecimiento a{" "}
                   <strong className="text-slate-700">
@@ -753,7 +752,7 @@ export const UsersPage: React.FC = () => {
                       <Copy className="w-4 h-4" />
                     </Button>
                   </div>
-                  <p className="text-[11px] text-slate-500 mt-2 leading-relaxed break-words">
+                  <p className="text-[11px] text-slate-500 mt-2 leading-relaxed wrap-break">
                     Al enviar, el usuario recibirá un correo con enlace a la
                     vista de cambio de contraseña (
                     <code className="text-[10px] bg-slate-100 px-1 py-0.5 rounded">

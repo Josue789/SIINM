@@ -106,17 +106,122 @@ export interface OfflineAuthRecord {
   integritySignature: string
 }
 
-async function sha256Hex(input: string): Promise<string> {
+/**
+ * Implementación pura en JS de SHA-256 (FIPS 180-4) con Uint32Array.
+ * No depende de window.crypto.subtle.digest para funcionar en cualquier IP HTTP local o contenedor.
+ */
+const SHA256_K = new Uint32Array([
+  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+  0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+  0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+  0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+  0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+  0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+  0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+  0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+])
+
+export function sha256PureJs(input: string): string {
   const encoder = new TextEncoder()
-  const data = encoder.encode(input)
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-  const hashArray = Array.from(new Uint8Array(hashBuffer))
-  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('')
+  const msg = encoder.encode(input)
+  const len = msg.length
+
+  // Padding a múltiplo de 64 bytes (512 bits)
+  const bitLenHi = Math.floor((len * 8) / 0x100000000)
+  const bitLenLo = (len * 8) >>> 0
+  const padLen = (len + 9 + 63) & ~63
+  const padded = new Uint8Array(padLen)
+  padded.set(msg)
+  padded[len] = 0x80
+  const view = new DataView(padded.buffer)
+  view.setUint32(padLen - 8, bitLenHi, false)
+  view.setUint32(padLen - 4, bitLenLo, false)
+
+  let h0 = 0x6a09e667
+  let h1 = 0xbb67ae85
+  let h2 = 0x3c6ef372
+  let h3 = 0xa54ff53a
+  let h4 = 0x510e527f
+  let h5 = 0x9b05688c
+  let h6 = 0x1f83d9ab
+  let h7 = 0x5be0cd19
+
+  const w = new Uint32Array(64)
+  const rotr = (x: number, n: number) => (x >>> n) | (x << (32 - n))
+
+  for (let offset = 0; offset < padLen; offset += 64) {
+    for (let i = 0; i < 16; i++) {
+      w[i] = view.getUint32(offset + i * 4, false)
+    }
+    for (let i = 16; i < 64; i++) {
+      const s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >>> 3)
+      const s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >>> 10)
+      w[i] = (w[i - 16] + s0 + w[i - 7] + s1) >>> 0
+    }
+
+    let a = h0
+    let b = h1
+    let c = h2
+    let d = h3
+    let e = h4
+    let f = h5
+    let g = h6
+    let h = h7
+
+    for (let i = 0; i < 64; i++) {
+      const S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)
+      const ch = (e & f) ^ (~e & g)
+      const temp1 = (h + S1 + ch + SHA256_K[i] + w[i]) >>> 0
+      const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22)
+      const maj = (a & b) ^ (a & c) ^ (b & c)
+      const temp2 = (S0 + maj) >>> 0
+
+      h = g
+      g = f
+      f = e
+      e = (d + temp1) >>> 0
+      d = c
+      c = b
+      b = a
+      a = (temp1 + temp2) >>> 0
+    }
+
+    h0 = (h0 + a) >>> 0
+    h1 = (h1 + b) >>> 0
+    h2 = (h2 + c) >>> 0
+    h3 = (h3 + d) >>> 0
+    h4 = (h4 + e) >>> 0
+    h5 = (h5 + f) >>> 0
+    h6 = (h6 + g) >>> 0
+    h7 = (h7 + h) >>> 0
+  }
+
+  const toHex = (n: number) => (n >>> 0).toString(16).padStart(8, '0')
+  return (
+    toHex(h0) +
+    toHex(h1) +
+    toHex(h2) +
+    toHex(h3) +
+    toHex(h4) +
+    toHex(h5) +
+    toHex(h6) +
+    toHex(h7)
+  )
+}
+
+export async function sha256Hex(input: string): Promise<string> {
+  return sha256PureJs(input)
 }
 
 function generateSalt(): string {
   const bytes = new Uint8Array(16)
-  crypto.getRandomValues(bytes)
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    crypto.getRandomValues(bytes)
+  } else {
+    for (let i = 0; i < 16; i++) {
+      bytes[i] = Math.floor(Math.random() * 256)
+    }
+  }
   return Array.from(bytes)
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('')
@@ -175,7 +280,18 @@ export function getOfflineAuthRecordByEmail(email?: string): OfflineAuthRecord |
   if (!email) return null
   const key = email.trim().toLowerCase()
   const map = getOfflineAuthRecordsMap()
-  return map[key] || null
+  if (map[key]) return map[key]
+
+  for (const [k, rec] of Object.entries(map)) {
+    if (
+      k.trim().toLowerCase() === key ||
+      rec?.email?.trim().toLowerCase() === key ||
+      rec?.user?.email?.trim().toLowerCase() === key
+    ) {
+      return rec
+    }
+  }
+  return null
 }
 
 export function revokeOfflineAuthRecord(email?: string): void {
@@ -207,30 +323,37 @@ export function clearActiveOfflineSession(): void {
   }
 }
 
-async function saveOfflineAuthRecordOnOnlineLogin(user: User, password: string): Promise<void> {
-  if (!user.email) return
+async function saveOfflineAuthRecordOnOnlineLogin(
+  user: User,
+  password: string,
+  loginEmail?: string
+): Promise<void> {
+  const effectiveEmail = (loginEmail || user.email || '').trim()
+  if (!effectiveEmail) return
   if (user.activo === false) {
-    revokeOfflineAuthRecord(user.email)
+    revokeOfflineAuthRecord(effectiveEmail)
     return
   }
 
-  const normalizedEmail = user.email.trim().toLowerCase()
+  const normalizedEmail = effectiveEmail.toLowerCase()
   const salt = generateSalt()
   const credentialHash = await computeCredentialHash(normalizedEmail, password, salt)
   const now = Date.now()
   const offlineExpiresAt = now + OFFLINE_AUTH_TTL_MS
 
+  const normalizedUser: User = {
+    id: user.id,
+    email: user.email || effectiveEmail,
+    fullName: user.fullName || effectiveEmail.split('@')[0],
+    role: user.role || 'Personal',
+    clinicaId: user.clinicaId ?? null,
+    clinicaNombre: user.clinicaNombre,
+    activo: true,
+  }
+
   const unsignedRecord: Omit<OfflineAuthRecord, 'integritySignature'> = {
     email: normalizedEmail,
-    user: {
-      id: user.id,
-      email: user.email,
-      fullName: user.fullName,
-      role: user.role,
-      clinicaId: user.clinicaId ?? null,
-      clinicaNombre: user.clinicaNombre,
-      activo: true,
-    },
+    user: normalizedUser,
     salt,
     credentialHash,
     verifiedOnlineAt: now,
@@ -238,10 +361,15 @@ async function saveOfflineAuthRecordOnOnlineLogin(user: User, password: string):
   }
 
   const integritySignature = await computeOfflineRecordSignature(unsignedRecord)
-  const map = getOfflineAuthRecordsMap()
-  map[normalizedEmail] = {
+  const fullRecord: OfflineAuthRecord = {
     ...unsignedRecord,
     integritySignature,
+  }
+
+  const map = getOfflineAuthRecordsMap()
+  map[normalizedEmail] = fullRecord
+  if (user.email && user.email.trim().toLowerCase() !== normalizedEmail) {
+    map[user.email.trim().toLowerCase()] = fullRecord
   }
   setOfflineAuthRecordsMap(map)
 }
@@ -255,19 +383,21 @@ export async function syncOfflineRecordProfile(user: User, extendExpiration = fa
   }
 
   const map = getOfflineAuthRecordsMap()
-  const existing = map[normalizedEmail]
+  const existing = map[normalizedEmail] || getOfflineAuthRecordByEmail(normalizedEmail)
   if (!existing) return
 
+  const canonicalKey = existing.email.trim().toLowerCase()
   const now = Date.now()
   const unsignedRecord: Omit<OfflineAuthRecord, 'integritySignature'> = {
     ...existing,
+    email: canonicalKey,
     user: {
       id: user.id,
       email: user.email,
-      fullName: user.fullName,
-      role: user.role,
-      clinicaId: user.clinicaId ?? null,
-      clinicaNombre: user.clinicaNombre,
+      fullName: user.fullName || existing.user.fullName,
+      role: user.role || existing.user.role,
+      clinicaId: user.clinicaId ?? existing.user.clinicaId ?? null,
+      clinicaNombre: user.clinicaNombre || existing.user.clinicaNombre,
       activo: true,
     },
     verifiedOnlineAt: extendExpiration ? now : existing.verifiedOnlineAt,
@@ -275,10 +405,12 @@ export async function syncOfflineRecordProfile(user: User, extendExpiration = fa
   }
 
   const integritySignature = await computeOfflineRecordSignature(unsignedRecord)
-  map[normalizedEmail] = {
+  const updatedRecord: OfflineAuthRecord = {
     ...unsignedRecord,
     integritySignature,
   }
+  map[canonicalKey] = updatedRecord
+  map[normalizedEmail] = updatedRecord
   setOfflineAuthRecordsMap(map)
 }
 
@@ -291,6 +423,12 @@ export function getUserActiveStatusMap(): Record<string, boolean> {
   }
 }
 
+/**
+ * Funcion que Guarda al usuario activo
+ * @param userId 
+ * @param activo 
+ * @param email 
+ */
 export function saveUserActiveStatus(userId: string, activo: boolean, email?: string): void {
   try {
     const current = getUserActiveStatusMap()
@@ -928,12 +1066,20 @@ export const authService = {
       })
 
       if (error) {
-        const msgLower = error.message.toLowerCase()
+        const msgLower = (error.message || '').toLowerCase()
+        const errName = (error.name || '').toLowerCase()
+        const errStatus = (error as { status?: number }).status
         const isNetworkError =
+          !navigator.onLine ||
+          errStatus === 0 ||
+          errName.includes('retryable') ||
+          errName.includes('fetch') ||
           msgLower.includes('fetch') ||
           msgLower.includes('network') ||
           msgLower.includes('failed to fetch') ||
-          msgLower.includes('load failed')
+          msgLower.includes('load failed') ||
+          msgLower.includes('offline') ||
+          msgLower.includes('timeout')
 
         if (isNetworkError) {
           return await this.authenticateOffline(email, password)
@@ -949,6 +1095,11 @@ export const authService = {
       const sbUser = data.user
       const cleanEmail = (sbUser.email || email).trim()
       const cleanPass = password.trim()
+
+      // 1. Guardar inmediatamente el registro de acceso offline en cuanto Supabase valida la contraseña,
+      // antes de las consultas adicionales de perfil para evitar condiciones de carrera al redirigir.
+      const initialUser = this.buildUser(sbUser, null)
+      await saveOfflineAuthRecordOnOnlineLogin(initialUser, password, cleanEmail)
 
       // Detectar si el usuario inició sesión utilizando una clave temporal
       const localTempHash = getLocalTempPasswordHash(cleanEmail)
@@ -976,6 +1127,7 @@ export const authService = {
       }
 
       if (user.activo === false) {
+        revokeOfflineAuthRecord(cleanEmail)
         revokeOfflineAuthRecord(user.email)
         await supabase.auth.signOut()
         return {
@@ -985,15 +1137,15 @@ export const authService = {
         }
       }
 
-      // Guardar perfil validado en línea + hash de contraseña + nueva fecha de expiración offline
-      await saveOfflineAuthRecordOnOnlineLogin(user, password)
+      // 2. Actualizar el registro offline con el perfil completo obtenido de Perfil_usuarios
+      await saveOfflineAuthRecordOnOnlineLogin(user, password, cleanEmail)
 
       // También dejar respaldada la sesión offline activa por si pierde conexión más adelante
       try {
         localStorage.setItem(
           ACTIVE_OFFLINE_SESSION_KEY,
           JSON.stringify({
-            email: user.email.trim().toLowerCase(),
+            email: cleanEmail.toLowerCase(),
             token: data.session.access_token,
             startedAt: Date.now(),
           })

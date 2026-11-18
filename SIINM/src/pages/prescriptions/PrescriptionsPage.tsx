@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Trash2,
   Check,
@@ -513,82 +513,87 @@ export const PrescriptionsPage: React.FC = () => {
         </h2>
 
         {addedItems.length === 0 ? (
-          <Card className="p-8 text-center text-slate-400 text-xs h-[calc(100vh-30rem)] flex items-center justify-center">
+          <Card className="p-8 text-center text-slate-400 text-xs flex items-center justify-center">
             No hay insumos en la lista aún. Escanea un código o busca un
             medicamento para agregar.
           </Card>
         ) : (
-          <ScrollArea type="auto" className="flex-1 h-[calc(100vh-30rem)]">
-            {addedItems.map((item) => (
-              <div
-                key={item.id}
-                className="bg-[#fffdf5] border border-amber-200/70 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs mb-3 mr-5"
-              >
-                <div>
-                  <h3 className="text-sm font-bold text-slate-800 m-0">
-                    {item.name}
-                  </h3>
-                  <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-slate-500">
-                    <span>
-                      SSA:{" "}
-                      <strong className="text-slate-700 font-mono">
-                        {item.ssa}
-                      </strong>
-                    </span>
-                    <span>•</span>
-                    <span>
-                      STOCK:{" "}
-                      <strong className="text-slate-700">
-                        {item.stock} piezas
-                      </strong>
-                    </span>
-                  </div>
-                  <div className="mt-1 text-xs text-amber-800 font-medium flex items-center gap-2">
-                    <span>LOTE Y CADUCIDAD:</span>
-                    <Badge
-                      variant="outline"
-                      className="font-mono text-xs bg-white text-slate-700"
-                    >
-                      {item.lote}
-                    </Badge>
-                    <span>Cad: {item.caducidad}</span>
-                  </div>
-                </div>
-
-                {/* Contador de cantidad y botón eliminar */}
-                <div className="flex items-center gap-3 shrink-0 self-end md:self-auto">
-                  <div className="flex items-center bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
-                    <button
-                      type="button"
-                      onClick={() => handleUpdateQuantity(item.id, -1)}
-                      className="px-2.5 py-1 text-slate-600 hover:bg-slate-100 font-bold transition-colors cursor-pointer"
-                    >
-                      -
-                    </button>
-                    <span className="px-3 py-1 text-xs font-bold text-slate-800 min-w-8 text-center">
-                      {item.quantity}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleUpdateQuantity(item.id, 1)}
-                      className="px-2.5 py-1 text-slate-600 hover:bg-slate-100 font-bold transition-colors cursor-pointer"
-                    >
-                      +
-                    </button>
+          <ScrollArea
+            type="auto"
+            className="w-full max-h-80 sm:max-h-96 rounded-2xl border border-slate-200/70 bg-white/40 p-2"
+          >
+            <div className="space-y-2.5 pr-2">
+              {addedItems.map((item) => (
+                <div
+                  key={item.id}
+                  className="bg-[#fffdf5] border border-amber-200/70 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs"
+                >
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-800 m-0">
+                      {item.name}
+                    </h3>
+                    <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-slate-500">
+                      <span>
+                        SSA:{" "}
+                        <strong className="text-slate-700 font-mono">
+                          {item.ssa}
+                        </strong>
+                      </span>
+                      <span>•</span>
+                      <span>
+                        STOCK:{" "}
+                        <strong className="text-slate-700">
+                          {item.stock} piezas
+                        </strong>
+                      </span>
+                    </div>
+                    <div className="mt-1 text-xs text-amber-800 font-medium flex items-center gap-2">
+                      <span>LOTE Y CADUCIDAD:</span>
+                      <Badge
+                        variant="outline"
+                        className="font-mono text-xs bg-white text-slate-700"
+                      >
+                        {item.lote}
+                      </Badge>
+                      <span>Cad: {item.caducidad}</span>
+                    </div>
                   </div>
 
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => handleRemoveItem(item.id)}
-                    title="Eliminar insumo"
-                    className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+                  {/* Contador de cantidad y botón eliminar */}
+                  <div className="flex items-center gap-3 shrink-0 self-end md:self-auto">
+                    <div className="flex items-center bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateQuantity(item.id, -1)}
+                        className="px-2.5 py-1 text-slate-600 hover:bg-slate-100 font-bold transition-colors cursor-pointer"
+                      >
+                        -
+                      </button>
+                      <span className="px-3 py-1 text-xs font-bold text-slate-800 min-w-8 text-center">
+                        {item.quantity}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateQuantity(item.id, 1)}
+                        className="px-2.5 py-1 text-slate-600 hover:bg-slate-100 font-bold transition-colors cursor-pointer"
+                      >
+                        +
+                      </button>
+                    </div>
+
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => handleRemoveItem(item.id)}
+                      title="Eliminar insumo"
+                      className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </ScrollArea>
         )}
       </div>

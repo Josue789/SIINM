@@ -61,6 +61,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useForm } from "react-hook-form";
 import copy from "copy-to-clipboard";
+import { userRepository } from "@/db/repositories/user.repository";
 
 export const ClinicsPage: React.FC = () => {
   const { isOnline } = useNetwork();
@@ -175,6 +176,10 @@ export const ClinicsPage: React.FC = () => {
     const newStatus = !clinic.activo;
     try {
       await clinicaRepository.updateStatus(clinic.id, newStatus);
+      await userRepository.updateStatusByClinic(
+        clinic.id.toString(),
+        newStatus,
+      );
       toast.success(newStatus ? "Clínica activada" : "Clínica desactivada");
       await fetchClinics();
     } catch (err: unknown) {

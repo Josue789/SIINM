@@ -3,6 +3,7 @@ import { PDFDocument, rgb, StandardFonts } from 'pdf-lib'
 import { z } from 'zod'
 import { db } from '@/db'
 import { supabase } from '@/services/supabase/client'
+import { sha256PureJs } from '@/services/supabase/auth.service'
 import { inventarioRepository } from '@/db/repositories/inventario.repository'
 import type { InventarioItem } from '@/types/inventory.types'
 
@@ -908,11 +909,7 @@ async function computeSyncIntegrityHash(
     items: canonicalItems,
   })
 
-  const encoder = new TextEncoder()
-  const data = encoder.encode(canonicalPayload)
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-  const hashArray = Array.from(new Uint8Array(hashBuffer))
-  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('')
+  return sha256PureJs(canonicalPayload)
 }
 
 /**

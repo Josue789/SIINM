@@ -8,6 +8,11 @@ import {
   RefreshCw,
   Wifi,
   WifiOff,
+  Edit,
+  MoreVertical,
+  X,
+  Check,
+  Loader2,
 } from "lucide-react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/db";
@@ -40,6 +45,19 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+} from "@radix-ui/react-dropdown-menu";
+import {
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 
 type FilterMode = "todos" | "correctos" | "urgentes" | "criticos";
 
@@ -127,6 +145,11 @@ export const InventoryPage: React.FC = () => {
   const [medicineToDelete, setMedicineToDelete] =
     useState<DisplayInventoryItem | null>(null);
   const [loteToVerify, setLoteToVerify] = useState<string>("");
+
+  const [updateQuantity, setUpdatequantity] = useState(false);
+  const [medicineToUpdate, setMedicineToUpdate] =
+    useState<DisplayInventoryItem | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   // Limpiar cualquier registro duplicado residual en Dexie al montar la página
   useEffect(() => {
@@ -228,6 +251,7 @@ export const InventoryPage: React.FC = () => {
     [],
   );
 
+  // Eliminar un registro del inventario
   const DeleteMedicine = async () => {
     setConfirmDelete(false);
     if (!medicineToDelete) return;
@@ -242,9 +266,36 @@ export const InventoryPage: React.FC = () => {
     }
   };
 
+  // Activa el modal de confirmación de eliminación
   const handleDelete = (medicine: DisplayInventoryItem) => {
     setConfirmDelete(true);
     setMedicineToDelete(medicine);
+  };
+
+  // Activa para actualizar la cantidad de un registro del inventario
+  const handleUpdateQuantity = (medicine: DisplayInventoryItem) => {
+    setUpdatequantity(true);
+    setMedicineToUpdate(medicine);
+  };
+
+  // Actualiza la cantidad de un registro del inventario
+  const UpdateQuantity = async () => {
+    setIsUpdating(true);
+    if (!medicineToUpdate) return;
+
+    try {
+      await inventarioRepository.updateStock({
+        recordId: String(medicineToUpdate.id),
+        newStock: Number(medicineToUpdate.stock),
+        reason: "Ajuste",
+      });
+      await refreshPendingCount();
+      setUpdatequantity(false);
+      setIsUpdating(false);
+      toast.success("Registro actualizado del inventario");
+    } catch (err) {
+      toast.error("No se pudo actualizar el registro");
+    }
   };
 
   const filteredMedicines = useMemo(() => {
@@ -440,7 +491,7 @@ export const InventoryPage: React.FC = () => {
                 <TableHead>Fech. caducidad</TableHead>
                 <TableHead>Stock</TableHead>
                 {user?.role !== "Personal" && (
-                  <TableHead className="text-right">Operaciones</TableHead>
+                  <TableHead className="text-center">Operaciones</TableHead>
                 )}
               </TableRow>
             </TableHeader>
@@ -484,26 +535,86 @@ export const InventoryPage: React.FC = () => {
                       )}
                     </TableCell>
                     <TableCell className="font-bold text-slate-800">
-                      <span className="inline-flex items-center gap-1.5">
-                        {m.stock} piezas
-                        {m.stock <= 5 && (
-                          <span title="Stock bajo">
-                            <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
-                          </span>
-                        )}
-                      </span>
+                      {updateQuantity && medicineToUpdate.id === m.id ? (
+                        <div className="flex gap-2">
+                          <InputGroup className="w-[50%]">
+                            <InputGroupInput
+                              className="w-full"
+                              type="number"
+                              disabled={isUpdating}
+                              value={medicineToUpdate.stock}
+                              onChange={(e) => {
+                                setMedicineToUpdate({
+                                  id: medicineToUpdate.id,
+                                  clave_ssa: medicineToUpdate.clave_ssa,
+                                  medicamento: medicineToUpdate.medicamento,
+                                  presentacion: medicineToUpdate.presentacion,
+                                  lote: medicineToUpdate.lote,
+                                  fecha_caducidad:
+                                    medicineToUpdate.fecha_caducidad,
+                                  stock: Number(e.target.value),
+                                });
+                              }}
+                            />
+                            <InputGroupAddon align="inline-end">
+                              {isUpdating ? (
+                                <Loader2 className="w-5 h-5 animate-spin" />
+                              ) : (
+                                <Button
+                                  onClick={() => UpdateQuantity()}
+                                  variant="ghost"
+                                  className="hover:bg-green-100 hover:text-green-700 w-min h-min"
+                                >
+                                  <Check className="w-5 h-5 " />
+                                </Button>
+                              )}
+                            </InputGroupAddon>
+                          </InputGroup>
+                          <Button
+                            onClick={() => setUpdatequantity(false)}
+                            variant="destructive"
+                            className="cursor-pointer h-min w-m"
+                          >
+                            <X />
+                          </Button>
+                        </div>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5">
+                          {m.stock} piezas
+                          {m.stock <= 5 && (
+                            <span title="Stock bajo">
+                              <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                            </span>
+                          )}
+                        </span>
+                      )}
                     </TableCell>
                     {user?.role !== "Personal" && (
-                      <TableCell className="flex justify-center items-center">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => handleDelete(m)}
-                          title="Eliminar registro"
-                          className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                      <TableCell className="flex justify-center">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger className="cursor-pointer">
+                            <MoreVertical />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent className="dark:bg-slate-100 dark:text-slate-800  border-0">
+                            <DropdownMenuItem
+                              className="cursor-pointer dark:hover:bg-slate-200 dark:hover:text-blue-600 "
+                              onClick={() => {
+                                handleUpdateQuantity(m);
+                              }}
+                            >
+                              <Edit />
+                              <span className="text-xs">Editar</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => handleDelete(m)}
+                              title="Eliminar registro"
+                              className="dark:text-slate-400 dark:hover:text-red-600 dark:hover:bg-red-50 cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              <span className="text-xs">Eliminar</span>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     )}
                   </TableRow>
