@@ -1,10 +1,24 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
-import { LogIn, Key, Mail, Eye, EyeOff, WifiOff, KeyRound } from "lucide-react";
+import {
+  LogIn,
+  Key,
+  Mail,
+  Eye,
+  EyeOff,
+  WifiOff,
+  KeyRound,
+  ShieldAlert,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "../../context/AuthContext";
 import { useNetwork } from "../../context/NetworkContext";
-import { OFFLINE_AUTH_TTL_DAYS } from "../../services/supabase/auth.service";
+import {
+  OFFLINE_AUTH_TTL_DAYS,
+  MAX_FAILED_LOGIN_ATTEMPTS,
+  getLoginLockoutStatus,
+  formatLockoutDuration,
+} from "../../services/supabase/auth.service";
 import { ROUTES } from "../../router/routes";
 import {
   InputGroup,
@@ -24,17 +38,39 @@ export const LoginPage: React.FC = () => {
   const {
     register,
     reset,
+    watch,
     handleSubmit,
     formState: { errors },
   } = useForm<FormValues>();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
-  const [tries, setTries] = useState(0);
+
+  const watchedEmail = watch("email") || "";
+  const [lockoutState, setLockoutState] = useState(() =>
+    getLoginLockoutStatus(),
+  );
 
   const { login } = useAuth();
   const { isOnline } = useNetwork();
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Actualizar estado de bloqueo cuando cambia el correo o cada segundo mientras esté bloqueado
+  useEffect(() => {
+    setLockoutState(getLoginLockoutStatus(watchedEmail));
+  }, [watchedEmail]);
+
+  useEffect(() => {
+    if (!lockoutState.isLocked) return;
+    const timer = setInterval(() => {
+      const next = getLoginLockoutStatus(watchedEmail);
+      setLockoutState(next);
+      if (!next.isLocked) {
+        clearInterval(timer);
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [lockoutState.isLocked, watchedEmail]);
 
   // Ruta a la que intentaba acceder antes de ser redirigido
   const destination =
@@ -42,17 +78,25 @@ export const LoginPage: React.FC = () => {
     ROUTES.MASTER_CATALOG;
 
   const onSubmit = async (credentials: FormValues) => {
-    if (tries >= 5) {
-      return toast.error("Demasiado intentos fallidos, intentalo mas tarde");
+    const currentLock = getLoginLockoutStatus(credentials.email);
+    setLockoutState(currentLock);
+
+    if (currentLock.isLocked) {
+      return toast.error(
+        `Cuenta bloqueada temporalmente. Intenta de nuevo en ${formatLockoutDuration(currentLock.remainingSeconds)}.`,
+      );
     }
+
     setIsSubmitting(true);
 
     const result = await login(credentials.email, credentials.password);
     setIsSubmitting(false);
 
+    const updatedLock = getLoginLockoutStatus(credentials.email);
+    setLockoutState(updatedLock);
+
     if (result.success) {
       reset();
-      setTries(0);
       if (credentials.password.trim().startsWith("Siinm-")) {
         toast.info(
           "Ingresaste con una clave temporal. Por seguridad, establece tu nueva contraseña.",
@@ -67,18 +111,10 @@ export const LoginPage: React.FC = () => {
         toast.info("Sesión iniciada en modo sin conexión (Offline).");
       }
       navigate(destination, { replace: true });
-    } else if (
-      result.error?.includes("desactivada") ||
-      result.error?.includes("primer inicio de sesión") ||
-      result.error?.includes("expiró") ||
-      result.error?.includes("alterados")
-    ) {
-      toast.error(result.error);
     } else if (result.error?.includes("rate limit")) {
-      toast.error("Demasiados intentos fallidos, intentalo mas tarde");
+      toast.error("Demasiados intentos fallidos, inténtalo más tarde");
     } else {
-      setTries((prev) => prev + 1);
-      toast.error("Las credenciales son incorrectas");
+      toast.error(result.error || "Las credenciales son incorrectas");
     }
   };
 
@@ -90,6 +126,34 @@ export const LoginPage: React.FC = () => {
         </h2>
         <p className="text-xs text-slate-500">Ingresa con tus credenciales</p>
       </div>
+
+      {lockoutState.isLocked && (
+        <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 flex items-start gap-2.5 text-red-800">
+          <ShieldAlert className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+          <div className="text-[11px] leading-snug">
+            <p className="font-bold m-0">
+              Acceso bloqueado temporalmente ({MAX_FAILED_LOGIN_ATTEMPTS}/
+              {MAX_FAILED_LOGIN_ATTEMPTS} intentos fallidos)
+            </p>
+            <p className="text-red-700 mt-0.5 m-0">
+              Por seguridad, debes esperar{" "}
+              <strong className="font-mono">
+                {formatLockoutDuration(lockoutState.remainingSeconds)}
+              </strong>{" "}
+              antes de volver a intentarlo.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {!lockoutState.isLocked && lockoutState.attempts > 0 && (
+        <div className="mb-4 px-3 py-2 rounded-xl bg-amber-50/80 border border-amber-200 text-[11px] text-amber-800 flex items-center justify-between">
+          <span>Intentos fallidos registrados:</span>
+          <strong className="font-mono">
+            {lockoutState.attempts} / {MAX_FAILED_LOGIN_ATTEMPTS}
+          </strong>
+        </div>
+      )}
 
       {!isOnline && (
         <div className="mb-4 p-3 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-2.5 text-amber-800">
@@ -164,11 +228,15 @@ export const LoginPage: React.FC = () => {
 
         <Button
           type="submit"
-          disabled={isSubmitting}
+          disabled={isSubmitting || lockoutState.isLocked}
           className="w-full mt-2 h-11"
         >
           {isSubmitting ? (
             <span>Conectando...</span>
+          ) : lockoutState.isLocked ? (
+            <span>
+              Bloqueado ({formatLockoutDuration(lockoutState.remainingSeconds)})
+            </span>
           ) : (
             <>
               <LogIn className="w-4 h-4 mr-2" />

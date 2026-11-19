@@ -8,7 +8,202 @@ const OFFLINE_AUTH_RECORDS_KEY = 'siinm_offline_auth_records_v1'
 const ACTIVE_OFFLINE_SESSION_KEY = 'siinm_active_offline_session_v1'
 const TEMP_PASSWORD_HASHES_KEY = 'siinm_temp_password_hashes_v1'
 const MUST_CHANGE_PASSWORD_KEY = 'siinm_must_change_password_v1'
+const LOGIN_LOCKOUT_STORAGE_KEY = 'siinm_login_lockout_v1'
 const OFFLINE_INTEGRITY_SECRET = 'SIINM_OFFLINE_AUTH_INTEGRITY_2026_V1'
+
+/**
+ * Configuración de bloqueo temporal por intentos fallidos de inicio de sesión:
+ * - Máximo 5 intentos fallidos consecutivos.
+ * - Al llegar al 5.º intento fallido, la cuenta se bloquea temporalmente por 5 minutos (300 s).
+ */
+export const MAX_FAILED_LOGIN_ATTEMPTS = 5
+export const LOGIN_LOCKOUT_DURATION_MS = 5 * 60 * 1000
+const LOGIN_ATTEMPT_WINDOW_MS = 15 * 60 * 1000
+
+interface LoginLockoutEntry {
+  email: string
+  attempts: number
+  lastAttemptAt: number
+  lockedUntil: number
+  signature: string
+}
+
+export interface LoginLockoutStatus {
+  isLocked: boolean
+  attempts: number
+  remainingAttempts: number
+  lockedUntil: number
+  remainingSeconds: number
+}
+
+function computeLockoutSignature(
+  email: string,
+  attempts: number,
+  lastAttemptAt: number,
+  lockedUntil: number
+): string {
+  return sha256PureJs(
+    `${OFFLINE_INTEGRITY_SECRET}:lockout:${email}:${attempts}:${lastAttemptAt}:${lockedUntil}`
+  )
+}
+
+function getLockoutMap(): Record<string, LoginLockoutEntry> {
+  try {
+    const raw = localStorage.getItem(LOGIN_LOCKOUT_STORAGE_KEY)
+    return raw ? JSON.parse(raw) : {}
+  } catch {
+    return {}
+  }
+}
+
+function saveLockoutMap(map: Record<string, LoginLockoutEntry>): void {
+  try {
+    localStorage.setItem(LOGIN_LOCKOUT_STORAGE_KEY, JSON.stringify(map))
+  } catch {
+    // ignore storage errors
+  }
+}
+
+export function formatLockoutDuration(seconds: number): string {
+  const mins = Math.floor(seconds / 60)
+  const secs = Math.max(0, seconds % 60)
+  if (mins > 0) {
+    return `${mins}m ${String(secs).padStart(2, '0')}s`
+  }
+  return `${secs}s`
+}
+
+export function getLoginLockoutStatus(email?: string): LoginLockoutStatus {
+  const key = (email || '__device_global__').trim().toLowerCase() || '__device_global__'
+  const map = getLockoutMap()
+  const entry = map[key] || map['__device_global__']
+  const now = Date.now()
+
+  if (!entry) {
+    return {
+      isLocked: false,
+      attempts: 0,
+      remainingAttempts: MAX_FAILED_LOGIN_ATTEMPTS,
+      lockedUntil: 0,
+      remainingSeconds: 0,
+    }
+  }
+
+  // Si la firma fue manipulada en localStorage, aplicar bloqueo preventivo de 5 minutos
+  const expectedSig = computeLockoutSignature(
+    entry.email,
+    entry.attempts,
+    entry.lastAttemptAt,
+    entry.lockedUntil
+  )
+  if (expectedSig !== entry.signature) {
+    const lockedUntil = now + LOGIN_LOCKOUT_DURATION_MS
+    const sig = computeLockoutSignature(key, MAX_FAILED_LOGIN_ATTEMPTS, now, lockedUntil)
+    map[key] = {
+      email: key,
+      attempts: MAX_FAILED_LOGIN_ATTEMPTS,
+      lastAttemptAt: now,
+      lockedUntil,
+      signature: sig,
+    }
+    saveLockoutMap(map)
+    return {
+      isLocked: true,
+      attempts: MAX_FAILED_LOGIN_ATTEMPTS,
+      remainingAttempts: 0,
+      lockedUntil,
+      remainingSeconds: Math.ceil(LOGIN_LOCKOUT_DURATION_MS / 1000),
+    }
+  }
+
+  // Si está actualmente bloqueado y aún no vence el tiempo
+  if (entry.lockedUntil > now) {
+    const remainingSeconds = Math.max(1, Math.ceil((entry.lockedUntil - now) / 1000))
+    return {
+      isLocked: true,
+      attempts: entry.attempts,
+      remainingAttempts: 0,
+      lockedUntil: entry.lockedUntil,
+      remainingSeconds,
+    }
+  }
+
+  // Si ya venció el bloqueo anterior o pasó la ventana de 15 minutos sin intentos, reiniciar contador
+  if (
+    (entry.lockedUntil > 0 && entry.lockedUntil <= now) ||
+    now - entry.lastAttemptAt > LOGIN_ATTEMPT_WINDOW_MS
+  ) {
+    delete map[key]
+    if (map['__device_global__']?.lockedUntil && map['__device_global__'].lockedUntil <= now) {
+      delete map['__device_global__']
+    }
+    saveLockoutMap(map)
+    return {
+      isLocked: false,
+      attempts: 0,
+      remainingAttempts: MAX_FAILED_LOGIN_ATTEMPTS,
+      lockedUntil: 0,
+      remainingSeconds: 0,
+    }
+  }
+
+  return {
+    isLocked: false,
+    attempts: entry.attempts,
+    remainingAttempts: Math.max(0, MAX_FAILED_LOGIN_ATTEMPTS - entry.attempts),
+    lockedUntil: 0,
+    remainingSeconds: 0,
+  }
+}
+
+export function recordFailedLoginAttempt(email?: string): LoginLockoutStatus {
+  const current = getLoginLockoutStatus(email)
+  if (current.isLocked) return current
+
+  const key = (email || '__device_global__').trim().toLowerCase() || '__device_global__'
+  const now = Date.now()
+  const newAttempts = current.attempts + 1
+  const isNowLocked = newAttempts >= MAX_FAILED_LOGIN_ATTEMPTS
+  const lockedUntil = isNowLocked ? now + LOGIN_LOCKOUT_DURATION_MS : 0
+
+  const map = getLockoutMap()
+  const entry: LoginLockoutEntry = {
+    email: key,
+    attempts: newAttempts,
+    lastAttemptAt: now,
+    lockedUntil,
+    signature: computeLockoutSignature(key, newAttempts, now, lockedUntil),
+  }
+  map[key] = entry
+
+  // También actualizar el registro global del dispositivo para recordar el bloqueo al recargar (F5)
+  map['__device_global__'] = {
+    email: '__device_global__',
+    attempts: newAttempts,
+    lastAttemptAt: now,
+    lockedUntil,
+    signature: computeLockoutSignature('__device_global__', newAttempts, now, lockedUntil),
+  }
+  saveLockoutMap(map)
+
+  return {
+    isLocked: isNowLocked,
+    attempts: newAttempts,
+    remainingAttempts: Math.max(0, MAX_FAILED_LOGIN_ATTEMPTS - newAttempts),
+    lockedUntil,
+    remainingSeconds: isNowLocked ? Math.ceil(LOGIN_LOCKOUT_DURATION_MS / 1000) : 0,
+  }
+}
+
+export function clearLoginLockout(email?: string): void {
+  const key = (email || '').trim().toLowerCase()
+  const map = getLockoutMap()
+  if (key && map[key]) {
+    delete map[key]
+  }
+  delete map['__device_global__']
+  saveLockoutMap(map)
+}
 
 export function setMustChangePasswordFlag(email: string, mustChange: boolean): void {
   if (!email) return
@@ -900,6 +1095,19 @@ export const authService = {
     password: string
   ): Promise<{ user: User | null; session: AuthSession | null; error: Error | null }> {
     const normalizedEmail = email.trim().toLowerCase()
+
+    // 0. Verificar si la cuenta o dispositivo tiene un bloqueo temporal activo por intentos fallidos
+    const lockout = getLoginLockoutStatus(normalizedEmail)
+    if (lockout.isLocked) {
+      return {
+        user: null,
+        session: null,
+        error: new Error(
+          `Cuenta bloqueada temporalmente por demasiados intentos fallidos. Intenta de nuevo en ${formatLockoutDuration(lockout.remainingSeconds)}.`
+        ),
+      }
+    }
+
     const record = getOfflineAuthRecordByEmail(normalizedEmail)
 
     if (!record) {
@@ -966,12 +1174,26 @@ export const authService = {
     // 4. Verificar hash de contraseña con su salt
     const candidateHash = await computeCredentialHash(normalizedEmail, password, record.salt)
     if (candidateHash !== record.credentialHash) {
+      const updatedLockout = recordFailedLoginAttempt(normalizedEmail)
+      if (updatedLockout.isLocked) {
+        return {
+          user: null,
+          session: null,
+          error: new Error(
+            `Demasiados intentos fallidos (${MAX_FAILED_LOGIN_ATTEMPTS}/${MAX_FAILED_LOGIN_ATTEMPTS}). Cuenta bloqueada temporalmente por ${formatLockoutDuration(updatedLockout.remainingSeconds)}.`
+          ),
+        }
+      }
       return {
         user: null,
         session: null,
-        error: new Error('Las credenciales son incorrectas'),
+        error: new Error(
+          `Las credenciales son incorrectas (Intento ${updatedLockout.attempts} de ${MAX_FAILED_LOGIN_ATTEMPTS})`
+        ),
       }
     }
+
+    clearLoginLockout(normalizedEmail)
 
     const token = `offline_${record.integritySignature.slice(0, 24)}`
     try {
@@ -1052,6 +1274,20 @@ export const authService = {
     email: string,
     password: string
   ): Promise<{ user: User | null; session: AuthSession | null; error: Error | null }> {
+    const normalizedEmail = email.trim().toLowerCase()
+
+    // 0. Verificar bloqueo temporal por intentos fallidos antes de consultar Supabase
+    const lockout = getLoginLockoutStatus(normalizedEmail)
+    if (lockout.isLocked) {
+      return {
+        user: null,
+        session: null,
+        error: new Error(
+          `Cuenta bloqueada temporalmente por demasiados intentos fallidos. Intenta de nuevo en ${formatLockoutDuration(lockout.remainingSeconds)}.`
+        ),
+      }
+    }
+
     const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true
 
     // Si el dispositivo no tiene internet, usar directamente el validador offline
@@ -1085,12 +1321,32 @@ export const authService = {
           return await this.authenticateOffline(email, password)
         }
 
-        return { user: null, session: null, error: new Error(error.message) }
+        // Registrar intento fallido de credenciales
+        const updatedLockout = recordFailedLoginAttempt(normalizedEmail)
+        if (updatedLockout.isLocked) {
+          return {
+            user: null,
+            session: null,
+            error: new Error(
+              `Demasiados intentos fallidos (${MAX_FAILED_LOGIN_ATTEMPTS}/${MAX_FAILED_LOGIN_ATTEMPTS}). Cuenta bloqueada temporalmente por ${formatLockoutDuration(updatedLockout.remainingSeconds)}.`
+            ),
+          }
+        }
+
+        return {
+          user: null,
+          session: null,
+          error: new Error(
+            `Las credenciales son incorrectas (Intento ${updatedLockout.attempts} de ${MAX_FAILED_LOGIN_ATTEMPTS})`
+          ),
+        }
       }
 
       if (!data.user || !data.session) {
         return { user: null, session: null, error: new Error('No se pudo iniciar sesión en Supabase') }
       }
+
+      clearLoginLockout(normalizedEmail)
 
       const sbUser = data.user
       const cleanEmail = (sbUser.email || email).trim()

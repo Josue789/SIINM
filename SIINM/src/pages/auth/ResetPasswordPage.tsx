@@ -133,8 +133,57 @@ export const ResetPasswordPage: React.FC = () => {
     setIsSubmitting(true);
 
     try {
-      // 1. Si existe un hash de verificación (en el enlace o guardado localmente), validar la clave temporal
-      if (expectedHash) {
+      // 1. Si no tiene sesión activa todavía (entró directo desde la app de escritorio Tauri),
+      // autenticarlo contra Supabase usando la Clave Temporal (o código OTP de 6 dígitos si se envió por correo)
+      if (!hasRecoverySession) {
+        const isSixDigitOtp = /^\d{6}$/.test(cleanTemp);
+
+        if (isSixDigitOtp) {
+          const { data: otpData, error: otpError } =
+            await supabase.auth.verifyOtp({
+              email: cleanEmail,
+              token: cleanTemp,
+              type: "recovery",
+            });
+
+          if (otpError || !otpData.session) {
+            setIsSubmitting(false);
+            toast.error(
+              "El código de verificación de 6 dígitos es inválido o ha expirado.",
+            );
+            return;
+          }
+        } else {
+          if (expectedHash) {
+            const candidateHash = await computeTempPasswordHash(
+              cleanEmail,
+              cleanTemp,
+            );
+            if (candidateHash !== expectedHash) {
+              setIsSubmitting(false);
+              toast.error(
+                "La clave temporal ingresada no coincide con la asignada por el administrador.",
+              );
+              return;
+            }
+          }
+
+          const { data: signInData, error: signInError } =
+            await supabase.auth.signInWithPassword({
+              email: cleanEmail,
+              password: cleanTemp,
+            });
+
+          if (signInError || !signInData.session) {
+            setIsSubmitting(false);
+            toast.error(
+              "La clave temporal es incorrecta o aún no ha sido aplicada en Supabase.",
+            );
+            return;
+          }
+        }
+      } else if (expectedHash) {
+        // Si ya tenía sesión iniciada con la clave temporal, verificar que confirme su clave temporal
         const candidateHash = await computeTempPasswordHash(
           cleanEmail,
           cleanTemp,
@@ -143,24 +192,6 @@ export const ResetPasswordPage: React.FC = () => {
           setIsSubmitting(false);
           toast.error(
             "La clave temporal ingresada no coincide con la asignada por el administrador.",
-          );
-          return;
-        }
-      }
-
-      // 2. Si el usuario no entró desde el enlace del correo (no tiene sesión activa de recuperación),
-      // intentar autenticarlo primero con la clave temporal en Supabase Auth
-      if (!hasRecoverySession) {
-        const { data: signInData, error: signInError } =
-          await supabase.auth.signInWithPassword({
-            email: cleanEmail,
-            password: cleanTemp,
-          });
-
-        if (signInError || !signInData.session) {
-          setIsSubmitting(false);
-          toast.error(
-            "Para aplicar el cambio abre primero el enlace enviado a tu correo electrónico, o verifica que tu clave temporal sea correcta.",
           );
           return;
         }

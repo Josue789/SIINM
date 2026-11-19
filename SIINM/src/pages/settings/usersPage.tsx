@@ -265,14 +265,14 @@ export const UsersPage: React.FC = () => {
     setTempPassword(userRepository.generateTemporaryPassword());
   };
 
-  // Procesar envío de correo de restablecimiento y/o clave temporal con Supabase
-  const handlePasswordReset = async (applyTempPassword: boolean) => {
+  // Procesar asignación de clave temporal en Supabase (compatible con App de Escritorio Tauri)
+  const handlePasswordReset = async (sendEmail: boolean) => {
     if (!userForPassword) return;
     if (!userForPassword.email) {
       toast.error("El usuario no cuenta con un correo electrónico registrado");
       return;
     }
-    if (applyTempPassword && tempPassword.trim().length < 8) {
+    if (tempPassword.trim().length < 8) {
       toast.error("La clave temporal debe tener al menos 8 caracteres");
       return;
     }
@@ -283,25 +283,27 @@ export const UsersPage: React.FC = () => {
         await userRepository.resetPasswordWithSupabase({
           userId: userForPassword.id,
           email: userForPassword.email,
-          tempPassword: applyTempPassword ? tempPassword.trim() : undefined,
-          sendEmail: true,
+          tempPassword: tempPassword.trim(),
+          sendEmail,
         });
 
-      if (applyTempPassword) {
-        copy(tempPassword.trim());
-        if (passwordUpdatedRemotely && emailSent) {
-          toast.success(
-            "Clave temporal aplicada, copiada al portapapeles y correo de cambio enviado por Supabase",
-          );
-        } else {
-          toast.success(
-            "Clave temporal copiada al portapapeles y correo de cambio de contraseña enviado por Supabase",
-          );
-        }
-      } else if (emailSent) {
+      copy(tempPassword.trim());
+
+      if (passwordUpdatedRemotely) {
         toast.success(
-          `Correo de cambio de contraseña enviado a ${userForPassword.email}`,
+          emailSent
+            ? "Clave temporal aplicada en Supabase, copiada al portapapeles y notificación enviada por correo."
+            : "Clave temporal aplicada en Supabase y copiada al portapapeles. Compártela con el usuario para que ingrese desde la app.",
         );
+      } else if (emailSent) {
+        toast.warn(
+          "Correo enviado y clave copiada. Nota: Para que la clave temporal funcione directo en la app de escritorio sin enlace web, ejecuta la función SQL admin_reset_user_password en Supabase.",
+        );
+      } else {
+        toast.error(
+          "No se encontró la función SQL admin_reset_user_password en Supabase. Ejecútala en el SQL Editor de Supabase para aplicar claves temporales sin correo.",
+        );
+        return;
       }
 
       setIsPasswordDialogOpen(false);
@@ -753,14 +755,12 @@ export const UsersPage: React.FC = () => {
                     </Button>
                   </div>
                   <p className="text-[11px] text-slate-500 mt-2 leading-relaxed wrap-break">
-                    Al enviar, el usuario recibirá un correo con enlace a la
-                    vista de cambio de contraseña (
-                    <code className="text-[10px] bg-slate-100 px-1 py-0.5 rounded">
-                      /restablecer-contrasena
-                    </code>
-                    ), donde se le solicitará esta{" "}
-                    <strong>clave temporal</strong> como validación de seguridad
-                    antes de guardar su nueva contraseña.
+                    Al aplicar esta <strong>clave temporal</strong>, se copia a
+                    tu portapapeles para que se la entregues al usuario. Cuando
+                    el usuario inicie sesión en la aplicación de escritorio con
+                    ella (o entre a <em>Cambiar contraseña</em>), el sistema lo
+                    obligará automáticamente a definir su nueva contraseña
+                    personal sin depender de enlaces web.
                   </p>
                 </div>
               </div>
@@ -782,25 +782,25 @@ export const UsersPage: React.FC = () => {
                   <Button
                     type="button"
                     variant="secondary"
-                    onClick={() => handlePasswordReset(false)}
+                    onClick={() => handlePasswordReset(true)}
                     disabled={isResettingPassword}
                     className="w-full gap-1.5 text-xs"
                   >
                     <Mail className="w-3.5 h-3.5 shrink-0" />
-                    <span className="truncate">Solo enviar correo</span>
+                    <span className="truncate">Aplicar y enviar correo</span>
                   </Button>
                 </div>
                 <Button
                   type="button"
-                  onClick={() => handlePasswordReset(true)}
+                  onClick={() => handlePasswordReset(false)}
                   disabled={isResettingPassword}
                   className="w-full gap-1.5 text-xs h-10"
                 >
-                  <Send className="w-3.5 h-3.5 shrink-0" />
+                  <KeyRound className="w-3.5 h-3.5 shrink-0" />
                   <span className="truncate">
                     {isResettingPassword
-                      ? "Enviando..."
-                      : "Vincular clave temporal y enviar correo"}
+                      ? "Aplicando en Supabase..."
+                      : "Aplicar clave temporal (Sin enlace web)"}
                   </span>
                 </Button>
               </DialogFooter>
