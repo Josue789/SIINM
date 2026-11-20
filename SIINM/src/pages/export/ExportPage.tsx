@@ -498,7 +498,7 @@ export const ExportPage: React.FC = () => {
       </div>
 
       {/* Sección de Importación y Validación de Paquetes .sync.gz hacia Supabase */}
-      {user.role !== "Personal" && (
+      {user?.role !== "Personal" && (
         <div className="pt-4 border-t border-slate-200 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>

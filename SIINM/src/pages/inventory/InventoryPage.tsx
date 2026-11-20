@@ -535,7 +535,7 @@ export const InventoryPage: React.FC = () => {
                       )}
                     </TableCell>
                     <TableCell className="font-bold text-slate-800">
-                      {updateQuantity && medicineToUpdate.id === m.id ? (
+                      {updateQuantity && medicineToUpdate && medicineToUpdate.id === m.id ? (
                         <div className="flex gap-2">
                           <InputGroup className="w-[50%]">
                             <InputGroupInput

@@ -331,7 +331,7 @@ export const ClinicsPage: React.FC = () => {
                       })}
                     />
                     <span className="text-red-700 text-xs font-semibold m-1">
-                      {errors.nombre?.message.toString()}
+                      {errors.nombre?.message?.toString()}
                     </span>
                   </div>
 
@@ -347,7 +347,7 @@ export const ClinicsPage: React.FC = () => {
                       })}
                     />
                     <span className="text-red-700 text-xs font-semibold m-1">
-                      {errors.clues?.message.toString()}
+                      {errors.clues?.message?.toString()}
                     </span>
                   </div>
 
@@ -363,7 +363,7 @@ export const ClinicsPage: React.FC = () => {
                       })}
                     />
                     <span className="text-red-700 text-xs font-semibold m-1">
-                      {errors.ubicacion?.message.toString()}
+                      {errors.ubicacion?.message?.toString()}
                     </span>
                   </div>
 
@@ -391,7 +391,7 @@ export const ClinicsPage: React.FC = () => {
                       })}
                     />
                     <span className="text-red-700 text-xs font-semibold m-1">
-                      {errors.telefono?.message.toString()}
+                      {errors.telefono?.message?.toString()}
                     </span>
                   </div>
                 </div>
@@ -576,7 +576,7 @@ export const ClinicsPage: React.FC = () => {
                           {item.clues}
                           <Button
                             onClick={() => {
-                              oncopy(item.clues);
+                              oncopy(item.clues || "");
                             }}
                             variant="ghost"
                           >
@@ -597,7 +597,7 @@ export const ClinicsPage: React.FC = () => {
                           <span>{item.ubicacion}</span>
                           <Button
                             onClick={() => {
-                              oncopy(item.ubicacion);
+                              oncopy(item.ubicacion || "");
                             }}
                             variant="ghost"
                           >
@@ -615,7 +615,7 @@ export const ClinicsPage: React.FC = () => {
                           <span>{item.telefono}</span>
                           <Button
                             onClick={() => {
-                              oncopy(item.telefono);
+                              oncopy(item.telefono || "");
                             }}
                             variant="ghost"
                           >

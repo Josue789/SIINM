@@ -334,7 +334,7 @@ export const CatalogPage: React.FC = () => {
                           })}
                         />
                         <span className="text-red-700 text-xs font-semibold">
-                          {errors.ssa?.message.toString()}
+                          {errors.ssa?.message?.toString()}
                         </span>
                       </div>
 
@@ -350,7 +350,7 @@ export const CatalogPage: React.FC = () => {
                           })}
                         />
                         <span className="text-red-700 text-xs font-semibold">
-                          {errors.codigo?.message.toString()}
+                          {errors.codigo?.message?.toString()}
                         </span>
                       </div>
 
@@ -367,7 +367,7 @@ export const CatalogPage: React.FC = () => {
                           })}
                         />
                         <span className="text-red-700 text-xs font-semibold">
-                          {errors.medicamento?.message.toString()}
+                          {errors.medicamento?.message?.toString()}
                         </span>
                       </div>
 
@@ -386,7 +386,7 @@ export const CatalogPage: React.FC = () => {
                             })}
                           />
                           <span className="text-red-700 text-xs font-semibold">
-                            {errors.presentacion?.message.toString()}
+                            {errors.presentacion?.message?.toString()}
                           </span>
                         </div>
                       </div>
