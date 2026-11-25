@@ -1,2 +1,2 @@
 # SIINM
-SISTEMA DE INVENTARIO DE MEDICAMENTO
+Sistema Integral de Inventario Médico

@@ -3,6 +3,7 @@ import { Outlet } from "react-router-dom";
 import { Pill } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
+import { ENV } from "@/config/env";
 
 export const AuthLayout: React.FC = () => {
   return (
@@ -13,10 +14,10 @@ export const AuthLayout: React.FC = () => {
             <Pill className="w-8 h-8 text-blue-600" />
           </div>
           <h1 className="text-3xl font-black tracking-wider text-slate-800 m-0">
-            SIINM
+            {ENV.APP_NAME}
           </h1>
           <p className="text-xs text-slate-500 font-medium mt-1">
-            Sistema Interno de Inventario de Medicamentos
+            {ENV.APP_FULL_NAME}
           </p>
         </div>
         <Card className="p-6 md:p-8 shadow-sm">

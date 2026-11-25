@@ -20,7 +20,6 @@
     "tauri": "npm --prefix SIINM run tauri"
   },
   "devDependencies": {
-    "@rolldown/binding-linux-x64-gnu": "^1.3.3",
     "@tauri-apps/cli": "^2.12.6"
   }
 }

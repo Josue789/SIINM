@@ -15,13 +15,17 @@ import {
   User as UserIcon,
   Pill,
   WifiOff,
+  RefreshCw,
 } from "lucide-react";
+import { isTauri } from "@tauri-apps/api/core";
+import { triggerManualUpdateCheck } from "../components/common/AppUpdater";
 import { useAuth } from "../context/AuthContext";
 import { useNetwork } from "../context/NetworkContext";
 import { ROUTES } from "../router/routes";
 import { NetworkStatusBadge } from "../components/common/NetworkStatusBadge";
 import { userRepository } from "../db/repositories/user.repository";
 import { clinicaRepository } from "../db/repositories/clinica.repository";
+import { ENV } from "../config/env";
 
 export const MainLayout: React.FC = () => {
   const { user, logout, refreshProfile } = useAuth();
@@ -106,10 +110,10 @@ export const MainLayout: React.FC = () => {
       <div className="md:hidden flex items-center justify-between px-4 py-3 bg-[#eef3f9] border-b border-slate-200">
         <div>
           <span className="text-lg font-black text-slate-800 tracking-wider">
-            SIINM
+            {ENV.APP_NAME}
           </span>
           <span className="text-[10px] text-slate-500 block -mt-1 font-medium">
-            Sistema de Inventario de Insumos Médicos
+            {ENV.APP_FULL_NAME}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -144,11 +148,11 @@ export const MainLayout: React.FC = () => {
                 <Pill size={20} className="text-blue-700" />
               </div>
               <h1 className="text-xl font-black text-slate-800 tracking-wider m-0">
-                SIINM
+                {ENV.APP_NAME}
               </h1>
             </div>
             <p className="text-xs text-slate-500 font-medium m-0 mt-0.5">
-              Sistema de Inventario de Insumos Médicos
+              {ENV.APP_FULL_NAME}
             </p>
           </div>
 
@@ -244,6 +248,18 @@ export const MainLayout: React.FC = () => {
                   : "Modo fuera de línea"}
             </span>
           </button>
+
+          {isTauri() && (
+            <button
+              type="button"
+              onClick={triggerManualUpdateCheck}
+              title="Buscar actualizaciones disponibles en GitHub"
+              className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-full text-xs font-semibold bg-white/80 text-slate-600 border border-slate-200 hover:bg-white hover:text-blue-600 transition-colors shadow-2xs cursor-pointer"
+            >
+              <RefreshCw className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Buscar actualizaciones</span>
+            </button>
+          )}
 
           {/* User Profile Card & Red Logout Button */}
           <div className="flex items-center gap-2 p-2 bg-white/70 rounded-2xl border border-slate-200/80 shadow-2xs">

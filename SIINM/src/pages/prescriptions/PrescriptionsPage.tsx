@@ -648,11 +648,11 @@ export const PrescriptionsPage: React.FC = () => {
               cada medicamento
             </DialogDescription>
           </DialogHeader>
-          <ScrollArea className="max-h-140">
+          <ScrollArea className="max-h-140 gap-2">
             {addedItems.map((item) => (
               <Card
                 key={item.id}
-                className="py-2 px-4 flex items-center justify-between"
+                className="py-2 px-4 flex items-center justify-between my-3"
               >
                 <div className="flex flex-col">
                   <span className="font-semibold text-slate-800">

@@ -260,7 +260,7 @@ export async function exportToExcel(
   // 1. Encabezado institucional
   worksheet.mergeCells('A1:H1')
   const titleCell = worksheet.getCell('A1')
-  titleCell.value = 'SIINM - SISTEMA INTEGRAL DE INVENTARIO DE MEDICAMENTOS'
+  titleCell.value = 'SIINM - SISTEMA INTEGRAL DE INVENTARIO MÉDICO'
   titleCell.font = { name: 'Calibri', size: 14, bold: true, color: { argb: 'FF1E3A8A' } }
   titleCell.alignment = { vertical: 'middle', horizontal: 'left' }
   worksheet.getRow(1).height = 24
@@ -553,7 +553,7 @@ export async function exportToPdf(
     // 1. Encabezado de página
     if (pageNum === 1) {
       // Título principal
-      page.drawText(sanitizeForWinAnsi('SIINM - SISTEMA INTEGRAL DE INVENTARIO DE MEDICAMENTOS'), {
+      page.drawText(sanitizeForWinAnsi('SIINM - SISTEMA INTEGRAL DE INVENTARIO MÉDICO'), {
         x: marginLeft,
         y: currentY,
         size: 13,
@@ -761,7 +761,7 @@ export async function exportToPdf(
       color: rgb(0.85, 0.88, 0.9),
     })
 
-    const footerLeft = sanitizeForWinAnsi(`SIINM - Sistema de Control Farmacéutico y Hospitalario`)
+    const footerLeft = sanitizeForWinAnsi('SIINM - Sistema Integral de Inventario Médico')
     page.drawText(footerLeft, {
       x: marginLeft,
       y: footerY,

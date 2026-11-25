@@ -2,11 +2,13 @@ import { RouterProvider } from 'react-router-dom'
 import { router } from './router'
 import { ToastContainer } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
+import { AppUpdater } from './components/common/AppUpdater'
 
 function App() {
   return (
     <>
       <RouterProvider router={router} />
+      <AppUpdater />
       <ToastContainer
         position="top-right"
         autoClose={3000}

@@ -1,7 +1,7 @@
 [package]
 name = "app"
 version = "0.1.0"
-description = "A Tauri App"
+description = "SIINM - Sistema Integral de Inventario Médico"
 authors = ["you"]
 license = ""
 repository = ""
@@ -23,3 +23,7 @@ serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
 tauri = { version = "2.12.7", features = [] }
 tauri-plugin-log = "2"
+tauri-plugin-process = "2"
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-updater = "2"

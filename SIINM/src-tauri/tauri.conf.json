@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "siinm",
+  "productName": "SIINM",
   "version": "0.1.0",
   "identifier": "com.caisesmoroleon.siinm",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "SIINM | Sistema Interno de Inventario de Medicamentos",
+        "title": "SIINM | Sistema Integral de Inventario Médico",
         "width": 1280,
         "height": 800,
         "resizable": true,
@@ -25,6 +25,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": "all",
     "icon": [
       "icons/32x32.png",
@@ -35,6 +36,14 @@
     ],
     "android": {
       "debugApplicationIdSuffix": ".debug"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJEMjk5OUQ1NDAzNTYzQUIKUldTcll6VkExWmtwdlJKZ3BpK1dtRnlLYmNMdWtxa2Q4ZENUNndsTENxcnFiYWI2RVFvclhxaXUK",
+      "endpoints": [
+        "https://github.com/Josue789/SIINM/releases/latest/download/latest.json"
+      ]
     }
   }
 }
